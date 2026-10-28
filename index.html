@@ -144,6 +144,29 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 .stats .h{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
 .stats .sw2{width:10px;height:10px;border-radius:3px;background:var(--c)}
 .card .row{display:flex;gap:8px}.card .row button{flex:1}
+.gl{display:flex;flex-direction:column;gap:8px;min-height:0;flex:0 1 auto}
+#game{flex-direction:column}
+/* Paysage : scores à gauche, pavé à droite */
+@media (orientation:landscape) and (max-height:620px){
+  .app{max-width:1100px;gap:6px;padding-top:calc(env(safe-area-inset-top) + 4px);padding-bottom:calc(env(safe-area-inset-bottom) + 6px)}
+  .top{min-height:32px}
+  .brand{font-size:17px}
+  #game{flex-direction:row!important;gap:12px}
+  .gl{flex:1 1 0;min-width:0;overflow-y:auto}
+  .board{overflow:visible}
+  .pc .sc{font-size:34px}
+  .board.many .pc .sc{font-size:28px}
+  .pad{flex:1 1 0;min-width:0;margin-top:0;justify-content:flex-end}
+  .mult button{height:calc((100dvh - 92px) / 6.4);min-height:30px;font-size:15px}
+  .k{height:calc((100dvh - 92px) / 6.4);min-height:30px;font-size:20px}
+  .k.sm{font-size:15px}
+  .slot{height:42px}
+  .setup{display:grid;grid-template-columns:1fr 1fr;align-content:start;gap:14px 18px}
+  .setup > div:first-child{grid-column:1 / -1}
+  .modes{grid-template-columns:repeat(3,1fr)}
+  .setup > div:last-child{grid-column:1 / -1}
+  .card{max-height:calc(100dvh - 24px)}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -182,10 +205,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   </section>
 
   <section id="game" class="hidden" style="flex:1;display:flex;flex-direction:column;gap:8px;min-height:0">
-    <div class="board" id="board"></div>
-    <div class="ctable hidden" id="ctable"></div>
-    <div class="hint" id="hint"></div>
-    <div class="visit" id="visit"></div>
+    <div class="gl">
+      <div class="board" id="board"></div>
+      <div class="ctable hidden" id="ctable"></div>
+      <div class="hint" id="hint"></div>
+      <div class="visit" id="visit"></div>
+    </div>
     <div class="pad">
       <div class="mult" id="mult">
         <button data-m="1">Simple</button><button data-m="2">Double</button><button data-m="3">Triple</button>
