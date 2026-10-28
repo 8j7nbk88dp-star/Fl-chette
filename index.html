@@ -120,7 +120,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 .k .own{position:absolute;top:4px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--oc)}
 
 /* Cricket */
-.ctable{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:auto;flex:0 1 auto;min-height:0}
+.ctable{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:auto;flex:0 1 auto;min-height:120px}
 .ctable table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .ctable th,.ctable td{padding:4px;text-align:center;border-bottom:1px solid var(--line)}
 .ctable tr:last-child td{border-bottom:0}
@@ -153,6 +153,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   .brand{font-size:17px}
   #game{flex-direction:row!important;gap:12px}
   .gl{flex:1 1 0;min-width:0;overflow-y:auto}
+  .gl > *{flex-shrink:0}
+  .ctable th,.ctable td{padding:2px 4px}
+  .ctable thead th{padding:6px 4px}
+  .mk{width:20px;height:20px}
+  .ctable td.tg{font-size:17px}
+  .ctable tr.pts td{font-size:20px}
   .board{overflow:visible}
   .pc .sc{font-size:34px}
   .board.many .pc .sc{font-size:28px}
