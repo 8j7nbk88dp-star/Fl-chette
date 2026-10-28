@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#101513">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Fléchettes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Compteur Fléchettes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Univers "cible" : ardoise sombre, crème du sisal, rouge/vert des anneaux. Couleur propre à chaque équipe/joueur.
+   Layout : appli une-page, tableau en haut, pavé au pouce en bas. */
+:root{
+  --bg:#101513; --panel:#1a211e; --panel-2:#222b27; --line:#2d3833;
+  --ink:#f1ead8; --muted:#8e9a93; --red:#d42a3e; --green:#1d9a57; --gold:#e9b949;
+  --display:"Oswald","Arial Narrow",Impact,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.app{height:100%;display:flex;flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 12px);
+  max-width:560px;margin:0 auto;gap:10px}
+.hidden{display:none!important}
+.top{display:flex;align-items:center;gap:8px;min-height:40px}
+.brand{font-family:var(--display);font-weight:600;font-size:20px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-right:auto;white-space:nowrap}
+.tag{font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ghost{padding:8px 12px;border-radius:10px;border:1px solid var(--line);font-weight:600;font-size:14px;background:var(--panel);white-space:nowrap}
+.ghost.ic{width:38px;padding:8px 0;font-family:var(--display);font-size:17px}
+
+/* Réglages */
+.setup{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:18px;padding-bottom:8px}
+.setup h2{font-family:var(--display);font-weight:500;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mode{text-align:left;padding:10px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.mode b{font-family:var(--display);font-size:18px;font-weight:600;letter-spacing:.02em}
+.mode span{font-size:12.5px;color:var(--muted);line-height:1.3}
+.mode[aria-pressed="true"]{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red);background:var(--panel-2)}
+.rules{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:14.5px;line-height:1.5;color:#d9d3c2}
+.rules p{margin:0 0 6px}.rules p:last-child{margin:0}
+.rules b{color:var(--ink)}
+.opts{display:flex;flex-direction:column;gap:8px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:11px 0;border-radius:10px;background:var(--panel);border:1px solid var(--line);font-family:var(--display);font-size:17px;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--red);border-color:var(--red)}
+.optl{font-size:13px;color:var(--muted);margin:2px 2px -2px}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);text-align:left;width:100%}
+.toggle small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.sw{flex:none;width:46px;height:28px;border-radius:999px;background:var(--line);position:relative;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--ink);transition:transform .15s}
+.toggle[aria-pressed="true"] .sw{background:var(--green)}
+.toggle[aria-pressed="true"] .sw::after{transform:translateX(18px)}
+.plist{display:flex;flex-direction:column;gap:8px}
+.prow{display:flex;gap:8px;align-items:center}
+.chip{flex:none;width:54px;padding:0;height:44px;border-radius:12px;border:2px solid var(--c);background:color-mix(in srgb,var(--c) 22%,transparent);font-family:var(--display);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
+.chip[disabled]{cursor:default}
+.prow input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:17px;user-select:text;-webkit-user-select:text}
+.prow .del{width:44px;height:44px;border-radius:12px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:20px}
+.add{padding:12px;border-radius:12px;border:1px dashed var(--line);color:var(--muted);font-weight:600;width:100%}
+.err{color:#ff7b8a;font-size:14px;min-height:0}
+.cta{padding:16px;border-radius:14px;background:var(--red);font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.cta.alt{background:var(--panel);border:1px solid var(--line)}
+
+/* Tableau */
+.board{display:grid;gap:8px;grid-template-columns:repeat(2,1fr);overflow-y:auto;flex:0 1 auto;min-height:0}
+.board.one{grid-template-columns:1fr}
+.pc{position:relative;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--c);border-radius:14px;padding:9px 11px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.pc.active{border-color:var(--c);box-shadow:0 0 0 1px var(--c),0 0 18px -6px var(--c);background:color-mix(in srgb,var(--c) 9%,var(--panel-2))}
+.pc.out{opacity:.4}
+.pc .nm{display:flex;align-items:center;gap:6px;font-weight:700;font-size:15px;min-width:0}
+.pc .nm .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc .mem{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc .mem b{color:var(--ink)}
+.pc .sc{font-family:var(--display);font-weight:700;font-size:42px;line-height:1.05;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:8px}
+.pc .sc small{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:.04em}
+.board.many .pc .sc{font-size:32px}
+.pc .meta{display:flex;justify-content:space-between;gap:6px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.legs{display:flex;gap:3px;margin-left:auto;flex:none}
+.legs i{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.badge{font-family:var(--display);font-size:11px;letter-spacing:.08em;padding:1px 6px;border-radius:5px;background:var(--red);color:#fff;text-transform:uppercase}
+.hint{font-family:var(--display);font-size:15px;letter-spacing:.03em;color:var(--gold);min-height:20px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Volée */
+.visit{display:grid;grid-template-columns:repeat(3,1fr) 1.2fr;gap:6px}
+.slot{background:var(--panel);border:1px solid var(--line);border-radius:12px;height:48px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:22px;font-weight:600;color:var(--muted)}
+.slot.f{color:var(--ink)}.slot.f.d{color:#5fd896}.slot.f.t{color:#ff6b7d}.slot.f.hit{background:color-mix(in srgb,var(--gold) 16%,var(--panel))}
+.slot.next{border-color:var(--muted);border-style:dashed}
+.slot.tot{background:transparent;border:0;flex-direction:column;line-height:1;color:var(--ink);font-size:24px;min-width:0}
+.slot.tot small{font-family:var(--body);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-top:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+
+/* Pavé */
+.pad{margin-top:auto;display:flex;flex-direction:column;gap:6px}
+.mult{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mult button{height:44px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.mult button.tg{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.mult button[data-m="1"][aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.mult button[data-m="2"][aria-pressed="true"]{background:var(--green);border-color:var(--green)}
+.mult button[data-m="3"][aria-pressed="true"]{background:var(--red);border-color:var(--red)}
+.nums{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.nums.cr{grid-template-columns:repeat(4,1fr)}
+.k{position:relative;height:clamp(44px,7vh,60px);border-radius:12px;background:var(--panel-2);border:1px solid var(--line);font-family:var(--display);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.k:active{transform:scale(.96);background:var(--line)}
+.k[disabled]{opacity:.3}
+.k.sm{font-size:17px;letter-spacing:.04em}
+.k.bull{color:#5fd896}.k.miss{color:var(--muted)}.k.undo{color:var(--gold)}
+.k.tg{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);background:color-mix(in srgb,var(--gold) 14%,var(--panel-2))}
+.k.closed{opacity:.35;text-decoration:line-through}
+.k .own{position:absolute;top:4px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--oc)}
+
+/* Cricket */
+.ctable{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:auto;flex:0 1 auto;min-height:0}
+.ctable table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.ctable th,.ctable td{padding:4px;text-align:center;border-bottom:1px solid var(--line)}
+.ctable tr:last-child td{border-bottom:0}
+.ctable thead th{font-weight:700;font-size:13.5px;padding:8px 4px;white-space:nowrap;max-width:92px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);box-shadow:inset 0 3px 0 var(--c)}
+.ctable thead th.active{color:var(--ink);background:color-mix(in srgb,var(--c) 14%,transparent)}
+.ctable td.tg{font-family:var(--display);font-size:19px;font-weight:600;width:54px}
+.ctable td.tg.dead{color:var(--muted);text-decoration:line-through}
+.ctable tr.pts td{font-family:var(--display);font-size:24px;font-weight:700;background:var(--panel-2)}
+.ctable td.colact{background:color-mix(in srgb,var(--c) 9%,transparent)}
+.mk{width:24px;height:24px;display:block;margin:0 auto}
+
+/* Toast, modales */
+.toast{position:fixed;left:50%;top:36%;transform:translate(-50%,-50%) scale(.9);background:var(--red);color:#fff;font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:12px 26px;border-radius:16px;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:20;white-space:nowrap}
+.toast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.toast.good{background:var(--green)}
+.modal{position:fixed;inset:0;background:rgba(5,8,7,.8);display:flex;align-items:center;justify-content:center;padding:20px;z-index:30}
+.card{width:100%;max-width:440px;max-height:100%;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.card h3{margin:0;font-family:var(--display);font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;text-wrap:balance}
+.card p{margin:0;color:var(--muted)}
+.stats{display:grid;grid-template-columns:auto 1fr auto;gap:7px 12px;font-variant-numeric:tabular-nums;font-size:15px;align-items:center}
+.stats .h{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.stats .sw2{width:10px;height:10px;border-radius:3px;background:var(--c)}
+.card .row{display:flex;gap:8px}.card .row button{flex:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1d9a57"/><circle cx="12" cy="12" r="8" fill="#f1ead8"/><circle cx="12" cy="12" r="5" fill="#d42a3e"/><circle cx="12" cy="12" r="2" fill="#101513"/></svg>
+      <span id="brandTxt">Fléchettes</span>
+    </div>
+    <span class="tag hidden" id="modeTag"></span>
+    <button class="ghost ic hidden" id="rulesBtn" aria-label="Règles">?</button>
+    <button class="ghost hidden" id="menuBtn">Menu</button>
+  </div>
+
+  <section class="setup" id="setup">
+    <div>
+      <h2>Mode de jeu</h2>
+      <div class="modes" id="modes"></div>
+    </div>
+    <div class="rules" id="setupRules"></div>
+    <div class="opts" id="opts"></div>
+    <div>
+      <h2>Joueurs</h2>
+      <div class="opts" style="margin-bottom:8px">
+        <button class="toggle" id="teamsT"><span>Jouer en équipes<small>Touchez la pastille de couleur pour changer d'équipe</small></span><span class="sw"></span></button>
+      </div>
+      <div class="plist" id="plist"></div>
+      <button class="add" id="addP" style="margin-top:8px">+ Ajouter un joueur</button>
+      <div class="err" id="err"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
+      <button class="cta alt hidden" id="resumeBtn">Reprendre la partie</button>
+      <button class="cta" id="startBtn">Lancer la partie</button>
+    </div>
+  </section>
+
+  <section id="game" class="hidden" style="flex:1;display:flex;flex-direction:column;gap:8px;min-height:0">
+    <div class="board" id="board"></div>
+    <div class="ctable hidden" id="ctable"></div>
+    <div class="hint" id="hint"></div>
+    <div class="visit" id="visit"></div>
+    <div class="pad">
+      <div class="mult" id="mult">
+        <button data-m="1">Simple</button><button data-m="2">Double</button><button data-m="3">Triple</button>
+      </div>
+      <div class="nums" id="nums"></div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal hidden" id="menuModal"><div class="card">
+  <h3>Menu</h3>
+  <button class="cta alt" id="mRestart">Recommencer la manche</button>
+  <button class="cta alt" id="mNew">Nouvelle partie</button>
+  <button class="ghost" id="mClose" style="padding:12px">Retour au jeu</button>
+</div></div>
+
+<div class="modal hidden" id="rulesModal"><div class="card">
+  <h3 id="rTitle"></h3>
+  <div class="rules" id="rBody"></div>
+  <button class="ghost" id="rClose" style="padding:12px">Fermer</button>
+</div></div>
+
+<div class="modal hidden" id="winModal"><div class="card">
+  <h3 id="winTitle"></h3>
+  <p id="winSub"></p>
+  <div class="stats" id="winStats"></div>
+  <div class="row">
+    <button class="ghost" id="wUndo" style="padding:12px">Annuler la fléchette</button>
+    <button class="cta" id="wAgain" style="font-size:18px;padding:12px">Rejouer</button>
+  </div>
+  <button class="ghost" id="wNew" style="padding:12px">Nouvelle partie</button>
+</div></div>
+
+<script>
+(function(){
+"use strict";
+const $ = id => document.getElementById(id);
+const KEY = "flechettes.v2";
+const TEAMS = [{n:"Rouge",c:"#e0384b"},{n:"Vert",c:"#22a862"},{n:"Bleu",c:"#3b8ae6"},{n:"Or",c:"#e9b949"}];
+const PCOL = ["#e0384b","#22a862","#3b8ae6","#e9b949","#a06ee8","#f08a24","#26bcc9","#e46aa6"];
+const CR = [20,19,18,17,16,15,25];
+const HALVE = [15,16,"D",17,18,"T",19,20,"B"];
+const esc = t => String(t).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const lbl = d => d.n===0 ? "0" : d.n===25 ? (d.m===2?"Bull":"25") : (d.m===3?"T":d.m===2?"D":"")+d.n;
+const val = d => d.n*d.m;
+const sum = v => v.reduce((s,d)=>s+val(d),0);
+const hearts = (n,max) => "♥".repeat(Math.max(0,n)) + '<span style="opacity:.3">'+"♥".repeat(Math.max(0,max-n))+"</span>";
+
+/* ---------- Finitions X01 ---------- */
+const FIN = [20,16,18,12,10,8,19,17,15,14,13,11,9,7,6,5,4,3,2,1].map(v=>({n:v,m:2})).concat([{n:25,m:2}]);
+const SETUP = []; for(let v=20;v>=1;v--) SETUP.push({n:v,m:3}); SETUP.push({n:25,m:2},{n:25,m:1}); for(let v=20;v>=1;v--) SETUP.push({n:v,m:1});
+function pick(v){ if(v<=0) return null; if(v<=20) return {n:v,m:1}; if(v===25) return {n:25,m:1}; if(v===50) return {n:25,m:2};
+  if(v%3===0&&v/3<=20) return {n:v/3,m:3}; if(v%2===0&&v/2<=20) return {n:v/2,m:2}; return null; }
+function checkout(rem,left,dO){
+  if(rem<=0||left<=0) return null;
+  if(!dO){ if(rem<=60){const a=pick(rem); if(a) return [a];}
+    if(left>=2) for(const a of SETUP){const b=pick(rem-val(a)); if(b) return [a,b];}
+    if(left>=3) for(const a of SETUP) for(const b of SETUP){const c=pick(rem-val(a)-val(b)); if(c) return [a,b,c];}
+    return null; }
+  if(rem>170) return null;
+  for(const f of FIN) if(val(f)===rem) return [f];
+  if(left>=2) for(const f of FIN){const a=pick(rem-val(f)); if(a) return [a,f];}
+  if(left>=3) for(const f of FIN) for(const a of SETUP){const b=pick(rem-val(f)-val(a)); if(b) return [a,b,f];}
+  return null;
+}
+function byScore(st, key, low){
+  // renvoie les camps à égalité en tête
+  const sc = st.s.map(key); const best = low ? Math.min(...sc) : Math.max(...sc);
+  return sc.map((v,i)=>v===best?i:-1).filter(i=>i>=0);
+}
+const roundsDone = (st,vis,R,E) => st.s.every((s,i)=> (E.out&&E.out(st,i)) || vis[i]>=R);
+
+/* ---------- Modes ---------- */
+const M = {};
+
+M.x01 = {
+  name:"X01", tag:"301, 501, 701… descendre à zéro", keypad:"full",
+  rules:`<p>Chaque camp part de <b>301, 501 ou 701</b> et retire les points de chaque volée de 3 fléchettes. Le premier à tomber <b>exactement à 0</b> gagne.</p>
+  <p><b>Sortie double</b> : la dernière fléchette doit être un double (ou le bull à 50). Passer sous 0, tomber à 1, ou finir à 0 sans double = <b>bust</b> : la volée est annulée.</p>
+  <p><b>Entrée double</b> : rien ne compte tant que le camp n'a pas touché un double. L'appli suggère une finition dès 170.</p>`,
+  opts:[{k:"start",l:"Score de départ",c:[301,501,701,901],d:501},{k:"dO",l:"Sortie double",t:"bool",d:true,sub:"Finir sur un double ou le bull"},{k:"dI",l:"Entrée double",t:"bool",d:false,sub:"Ouvrir le score avec un double"}],
+  label:o=>o.start+(o.dI?" · DI":"")+(o.dO?" · DO":""),
+  init:(sides,o)=>({s:sides.map(()=>({score:o.start,darts:0,pts:0,opened:!o.dI,best:0,last:null}))}),
+  dart(st,i,d,v,r,o){
+    const s=st.s[i]; if(v.length===1){s.vs=s.score;s.vo=s.opened;}
+    s.darts++; let c=val(d); const dbl=d.m===2;
+    if(!s.opened){ if(dbl) s.opened=true; else c=0; }
+    const ns=s.score-c;
+    if(ns<0||(o.dO&&ns===1)||(ns===0&&o.dO&&!dbl)){ s.score=s.vs; s.opened=s.vo; s.last={b:1}; return {end:1,ev:"Bust !"}; }
+    s.score=ns;
+    if(ns===0){ s.pts+=s.vs; s.last={t:s.vs}; return {win:1}; }
+  },
+  endVisit(st,i,v,r,o,res){
+    const s=st.s[i]; if(res.end) return;
+    const t=s.vs-s.score; s.pts+=t; s.best=Math.max(s.best,t); s.last={t};
+    if(t===180) return {ev:"180 !",good:1};
+  },
+  card(st,i){ const s=st.s[i]; return {big:s.score, sub:`<span>Moy. ${s.darts?(s.pts/s.darts*3).toFixed(1):"–"}</span><span>${s.last?(s.last.b?"Bust":"Dernière "+s.last.t):""}</span>`}; },
+  hint(st,i,v,r,o){ const s=st.s[i]; if(!s.opened) return "Touchez un double pour ouvrir";
+    const p=checkout(s.score,3-v.length,o.dO); return p?"Finition : "+p.map(lbl).join(" · "):""; },
+  stat:(st,i)=>[ (st.s[i].darts?(st.s[i].pts/st.s[i].darts*3).toFixed(1):"–")+" moy.", "meilleure "+st.s[i].best ],
+  vtot:v=>sum(v)
+};
+
+M.cricket = {
+  name:"Cricket", tag:"Fermer 15 à 20 et le bull", keypad:"cricket",
+  rules:`<p>On ne vise que <b>15, 16, 17, 18, 19, 20 et le bull</b>. Il faut 3 marques pour <b>fermer</b> un numéro : simple = 1, double = 2, triple = 3 (bull extérieur = 1, centre = 2).</p>
+  <p>Une fois un numéro fermé chez vous, chaque marque en plus <b>rapporte sa valeur en points</b> tant qu'un adversaire ne l'a pas fermé. Quand tout le monde l'a fermé, il est mort.</p>
+  <p>Gagne le premier camp qui ferme tout <b>avec au moins autant de points</b> que les autres.</p>
+  <p><b>Cut-Throat</b> : les points en trop sont donnés aux adversaires qui n'ont pas fermé ; il faut fermer tout avec <b>le moins de points</b>.</p>`,
+  opts:[{k:"cut",l:"Variante",c:[["std","Classique"],["cut","Cut-Throat"]],d:"std"}],
+  label:o=>o.cut==="cut"?"Cut-Throat":"",
+  init:sides=>({s:sides.map(()=>{const m={};CR.forEach(t=>m[t]=0);return {marks:m,pts:0,darts:0,hits:0};})}),
+  dart(st,i,d,v,r,o){
+    const s=st.s[i]; s.darts++;
+    if(CR.includes(d.n)) for(let k=0;k<d.m;k++){
+      if(s.marks[d.n]<3){s.marks[d.n]++;s.hits++;}
+      else { const open=st.s.filter((x,j)=>j!==i&&x.marks[d.n]<3);
+        if(open.length){ s.hits++; if(o.cut==="cut") open.forEach(x=>x.pts+=d.n); else s.pts+=d.n; } }
+    }
+  },
+  done(st){
+    for(let i=0;i<st.s.length;i++){ const s=st.s[i];
+      if(CR.every(t=>s.marks[t]>=3) && st.s.every((x,j)=>j===i||(this._cut?s.pts<=x.pts:s.pts>=x.pts))) return [i]; }
+    return null;
+  },
+  keys:(st,i)=>({nums:CR.filter(t=>st.s[i].marks[t]<3)}),
+  hint(st,i){ const left=CR.filter(t=>st.s[i].marks[t]<3); return left.length?"À fermer : "+left.map(t=>t===25?"Bull":t).join(" "):"Tout est fermé, marquez des points"; },
+  stat:(st,i)=>[st.s[i].pts+" pts",(st.s[i].darts?(st.s[i].hits/st.s[i].darts*3).toFixed(1):"–")+" marques/volée"],
+  vtot:()=>"", table:true
+};
+
+M.atc = {
+  name:"Tour de l'horloge", tag:"Toucher 1 à 20 dans l'ordre", keypad:"full",
+  rules:`<p>Touchez les numéros <b>dans l'ordre, de 1 à 20</b>, puis le <b>bull</b> si l'option est active. Chaque camp a son propre numéro cible ; le premier à finir la tournée gagne.</p>
+  <p>Avec l'option <b>sauts</b>, un double fait avancer de 2 cases et un triple de 3. Sans elle, n'importe quel segment du bon numéro avance d'une case.</p>`,
+  opts:[{k:"skip",l:"Doubles et triples font sauter des cases",t:"bool",d:true,sub:"Double = +2, triple = +3"},{k:"bull",l:"Finir sur le bull",t:"bool",d:true,sub:"Après le 20, il faut toucher le bull"}],
+  label:o=>(o.skip?"sauts":"")+(o.bull?(o.skip?" · ":"")+"bull":""),
+  seq:o=>{const a=[];for(let i=1;i<=20;i++)a.push(i);if(o.bull)a.push(25);return a;},
+  init(sides,o){return {s:sides.map(()=>({idx:0,darts:0,hits:0})),seq:this.seq(o)};},
+  dart(st,i,d,v,r,o){
+    const s=st.s[i]; s.darts++;
+    if(d.n===st.seq[s.idx]){ s.hits++; s.idx+= (o.skip&&d.n!==25)?d.m:1; if(s.idx>=st.seq.length){s.idx=st.seq.length;return {win:1};} }
+  },
+  card(st,i){ const s=st.s[i], t=st.seq[s.idx]; return {big:t===undefined?"✓":(t===25?"Bull":t), pre:"Cible", sub:`<span>${s.idx}/${st.seq.length} cases</span><span>${s.darts} fl.</span>`}; },
+  keys:(st,i)=>({nums:[st.seq[st.s[i].idx]]}),
+  hint:(st,i)=>{const t=st.seq[st.s[i].idx];return "Visez le "+(t===25?"bull":t);},
+  stat:(st,i)=>[st.s[i].idx+"/"+st.seq.length,st.s[i].darts+" fléchettes"],
+  vtot:()=>""
+};
+
+M.killer = {
+  name:"Killer", tag:"Devenir tueur, éliminer les autres", keypad:"full", min:2,
+  rules:`<p>Chaque camp reçoit <b>un numéro au hasard</b> (affiché sur sa carte et par une pastille sur le pavé) et un nombre de vies.</p>
+  <p>Touchez <b>le double de votre numéro</b> pour devenir <b>Killer</b>. Ensuite, chaque double touché sur le numéro d'un adversaire lui retire <b>une vie</b>.</p>
+  <p>Attention : un Killer qui retouche son propre double perd une vie. À 0 vie, le camp est éliminé. Le dernier camp en vie gagne.</p>`,
+  opts:[{k:"lives",l:"Vies",c:[3,5,7],d:3}],
+  label:o=>o.lives+" vies",
+  init:(sides,o,S)=>({s:sides.map((x,i)=>({num:S.nums[i],lives:o.lives,killer:false,kills:0}))}),
+  out:(st,i)=>st.s[i].lives<=0,
+  dart(st,i,d){
+    if(d.m!==2||d.n===25) return;
+    const s=st.s[i];
+    if(d.n===s.num){ if(!s.killer){s.killer=true;return {ev:"Killer !",good:1};} s.lives--; return s.lives<=0?{end:1,ev:"Éliminé"}:{ev:"Vie perdue"}; }
+    if(!s.killer) return;
+    const j=st.s.findIndex(x=>x.num===d.n&&x.lives>0);
+    if(j>=0){ st.s[j].lives--; s.kills++; return {ev:st.s[j].lives<=0?"Éliminé !":"Touché !",good:1}; }
+  },
+  done(st){ const a=st.s.map((s,i)=>s.lives>0?i:-1).filter(i=>i>=0); return a.length<=1?(a.length?a:[0]):null; },
+  card(st,i,o){ const s=st.s[i]; return {big:"D"+s.num, sub:`<span style="color:#ff6b7d;letter-spacing:2px">${hearts(s.lives,o.lives)}</span>${s.killer?'<span class="badge">Killer</span>':""}`}; },
+  keys(st,i){ const s=st.s[i]; return s.killer?{nums:st.s.filter((x,j)=>j!==i&&x.lives>0).map(x=>x.num),mult:2}:{nums:[s.num],mult:2}; },
+  owners:st=>st.s.map((s,i)=>[s.num,i]),
+  hint:(st,i)=>st.s[i].killer?"Visez les doubles adverses":"Visez le double "+st.s[i].num+" pour devenir Killer",
+  stat:(st,i)=>[st.s[i].lives>0?st.s[i].lives+" vie(s)":"éliminé",st.s[i].kills+" vie(s) prise(s)"],
+  vtot:()=>""
+};
+
+M.shanghai = {
+  name:"Shanghai", tag:"Une cible par manche, coup spécial", keypad:"full",
+  rules:`<p>Manche 1, on ne vise que le <b>1</b> ; manche 2, le <b>2</b>, et ainsi de suite. Seul le numéro de la manche compte : simple, double ou triple multiplie sa valeur.</p>
+  <p>Un <b>Shanghai</b> (simple + double + triple du numéro dans la même volée) fait <b>gagner immédiatement</b>.</p>
+  <p>Sinon, le plus gros score après la dernière manche l'emporte.</p>`,
+  opts:[{k:"rounds",l:"Manches",c:[7,10,20],d:7}],
+  label:o=>o.rounds+" manches",
+  init:sides=>({s:sides.map(()=>({score:0}))}),
+  dart(st,i,d,v,r){
+    const t=r+1; if(d.n===t){ st.s[i].score+=val(d);
+      const ms=new Set(v.filter(x=>x.n===t).map(x=>x.m)); if(ms.size===3) return {win:1,ev:"Shanghai !",good:1}; }
+  },
+  done(st,vis,o){ return roundsDone(st,vis,o.rounds,this)?byScore(st,s=>s.score):null; },
+  card:(st,i,o,r)=>({big:st.s[i].score, sub:`<span>Manche ${Math.min(r+1,o.rounds)}/${o.rounds}</span>`}),
+  keys:(st,i,r)=>({nums:[r+1]}),
+  hint:(st,i,v,r)=>"Manche "+(r+1)+" : visez le "+(r+1),
+  stat:(st,i)=>[st.s[i].score+" pts",""],
+  vtot:(v,st,i,r)=>v.filter(d=>d.n===r+1).reduce((a,d)=>a+val(d),0)
+};
+
+M.halve = {
+  name:"Moitié (Halve-It)", tag:"Rater une manche divise le score", keypad:"full",
+  rules:`<p>Chaque camp part de <b>40 points</b>. Chaque manche impose une cible : <b>15, 16, un double, 17, 18, un triple, 19, 20 puis le bull</b>.</p>
+  <p>Les fléchettes qui touchent la cible ajoutent leur valeur. Si aucune des 3 fléchettes ne touche la cible, <b>le score est divisé par deux</b> (arrondi en dessous).</p>
+  <p>Le meilleur score après les 9 manches gagne.</p>`,
+  opts:[],
+  label:()=>"",
+  T:t=>t==="D"?"un double":t==="T"?"un triple":t==="B"?"le bull":"le "+t,
+  hit:(t,d)=> t==="D"?d.m===2: t==="T"?d.m===3: t==="B"?d.n===25: d.n===t,
+  init:sides=>({s:sides.map(()=>({score:40}))}),
+  dart(st,i,d,v,r){ const t=HALVE[r]; if(this.hit(t,d)) st.s[i].score+=val(d); },
+  endVisit(st,i,v,r){ const t=HALVE[r]; if(!v.some(d=>this.hit(t,d))){ st.s[i].score=Math.floor(st.s[i].score/2); return {ev:"Moitié !"}; } },
+  done(st,vis){ return roundsDone(st,vis,HALVE.length,this)?byScore(st,s=>s.score):null; },
+  card(st,i,o,r){ return {big:st.s[i].score, sub:`<span>Manche ${Math.min(r+1,9)}/9</span>`}; },
+  keys(st,i,r){ const t=HALVE[r]; return t==="D"?{mult:2}:t==="T"?{mult:3}:t==="B"?{nums:[25]}:{nums:[t]}; },
+  hint(st,i,v,r){ return "Manche "+(r+1)+" : visez "+this.T(HALVE[r]); },
+  stat:(st,i)=>[st.s[i].score+" pts",""],
+  vtot(v,st,i,r){ return v.filter(d=>this.hit(HALVE[r],d)).reduce((a,d)=>a+val(d),0); }
+};
+
+M.baseball = {
+  name:"Baseball", tag:"9 manches, des points de course", keypad:"full",
+  rules:`<p>La partie dure <b>9 manches</b>. À la manche 1 on vise le <b>1</b>, à la manche 2 le <b>2</b>, etc.</p>
+  <p>Sur le bon numéro : simple = <b>1 point</b>, double = <b>2</b>, triple = <b>3</b>. Les autres numéros ne comptent pas.</p>
+  <p>Le camp qui a le plus de points après 9 manches gagne.</p>`,
+  opts:[],
+  label:()=>"9 manches",
+  init:sides=>({s:sides.map(()=>({runs:0}))}),
+  dart(st,i,d,v,r){ if(d.n===r+1) st.s[i].runs+=d.m; },
+  done(st,vis){ return roundsDone(st,vis,9,this)?byScore(st,s=>s.runs):null; },
+  card:(st,i,o,r)=>({big:st.s[i].runs, sub:`<span>Manche ${Math.min(r+1,9)}/9</span>`}),
+  keys:(st,i,r)=>({nums:[r+1]}),
+  hint:(st,i,v,r)=>"Manche "+(r+1)+" : visez le "+(r+1),
+  stat:(st,i)=>[st.s[i].runs+" pts",""],
+  vtot:(v,st,i,r)=>v.filter(d=>d.n===r+1).reduce((a,d)=>a+d.m,0)
+};
+
+M.countup = {
+  name:"Score max", tag:"Le plus de points en X volées", keypad:"full",
+  rules:`<p>Le plus simple : chaque fléchette ajoute sa valeur. Pas de cible imposée, pas de bust.</p>
+  <p>Le camp qui a le <b>plus gros total</b> après le nombre de volées choisi gagne. Idéal pour s'échauffer ou travailler le T20.</p>`,
+  opts:[{k:"rounds",l:"Volées",c:[5,8,10,20],d:8}],
+  label:o=>o.rounds+" volées",
+  init:sides=>({s:sides.map(()=>({score:0,darts:0}))}),
+  dart(st,i,d){ st.s[i].score+=val(d); st.s[i].darts++; },
+  endVisit(st,i,v){ if(sum(v)===180) return {ev:"180 !",good:1}; },
+  done(st,vis,o){ return roundsDone(st,vis,o.rounds,this)?byScore(st,s=>s.score):null; },
+  card:(st,i,o,r)=>({big:st.s[i].score, sub:`<span>Volée ${Math.min(r+1,o.rounds)}/${o.rounds}</span><span>Moy. ${st.s[i].darts?(st.s[i].score/st.s[i].darts*3).toFixed(1):"–"}</span>`}),
+  hint:(st,i,v,r,o)=>"Volée "+(r+1)+" sur "+o.rounds,
+  stat:(st,i)=>[st.s[i].score+" pts",(st.s[i].darts?(st.s[i].score/st.s[i].darts*3).toFixed(1):"–")+" moy."],
+  vtot:v=>sum(v)
+};
+
+M.bobs = {
+  name:"Bob's 27", tag:"Entraînement aux doubles", keypad:"full",
+  rules:`<p>Exercice d'entraînement aux doubles. Chaque camp part de <b>27 points</b>.</p>
+  <p>Manche 1 : visez le <b>double 1</b> ; manche 2 : le <b>double 2</b>… jusqu'au double 20. Chaque double touché <b>ajoute sa valeur</b> (D5 = +10).</p>
+  <p>Si les 3 fléchettes ratent le double de la manche, <b>on retire sa valeur</b>. Sous 0, le camp est éliminé. Meilleur score à la fin = victoire.</p>`,
+  opts:[],
+  label:()=>"",
+  init:sides=>({s:sides.map(()=>({score:27,hits:0,dead:false,rounds:0}))}),
+  out:(st,i)=>st.s[i].dead,
+  dart(st,i,d,v,r){ if(d.n===r+1&&d.m===2){ st.s[i].score+=2*(r+1); st.s[i].hits++; } },
+  endVisit(st,i,v,r){ const s=st.s[i]; s.rounds=r+1; if(!v.some(d=>d.n===r+1&&d.m===2)){ s.score-=2*(r+1); if(s.score<0){s.dead=true;return {ev:"Éliminé"};} } },
+  done(st,vis){
+    if(!roundsDone(st,vis,20,this)) return null;
+    const alive=st.s.some(s=>!s.dead);
+    return byScore(st,s=> alive ? (s.dead?-1e6:s.score) : s.rounds);
+  },
+  card(st,i,o,r){ const s=st.s[i]; return s.dead?{big:"Out",sub:`<span>Éliminé manche ${s.rounds}</span>`}:{big:s.score, sub:`<span>Cible D${Math.min(r+1,20)}</span><span>${s.hits} doubles</span>`}; },
+  keys:(st,i,r)=>({nums:[r+1],mult:2}),
+  hint:(st,i,v,r)=>"Manche "+(r+1)+" : visez le double "+(r+1),
+  stat:(st,i)=>[st.s[i].dead?"éliminé":st.s[i].score+" pts",st.s[i].hits+" doubles"],
+  vtot:(v,st,i,r)=>v.filter(d=>d.n===r+1&&d.m===2).length+"/3"
+};
+const ORDER = ["x01","cricket","atc","killer","shanghai","halve","baseball","countup","bobs"];
+
+/* ---------- État ---------- */
+function defOpts(){ const o={}; ORDER.forEach(id=>{ o[id]={}; M[id].opts.forEach(x=>{ o[id][x.k]=Array.isArray(x.d)?x.d[0]:x.d; }); }); return o; }
+let S = { mode:"x01", opts:defOpts(), teams:false,
+  players:[{name:"Joueur 1",team:0},{name:"Joueur 2",team:1}],
+  sides:null, nums:null, legs:[], starter:0, darts:[], playing:false };
+let mult=1, lastEv=-1;
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function load(){ try{ const o=JSON.parse(localStorage.getItem(KEY)||"null");
+  if(o&&o.opts&&Array.isArray(o.players)&&M[o.mode]){ const d=defOpts(); for(const k in d) o.opts[k]=Object.assign(d[k],o.opts[k]||{}); S=Object.assign(S,o); } }catch(e){} }
+function buzz(ms){ try{ navigator.vibrate&&navigator.vibrate(ms); }catch(e){} }
+const O = () => S.opts[S.mode];
+const E = () => M[S.mode];
+
+function buildSides(){
+  if(S.teams){
+    const used=[...new Set(S.players.map(p=>p.team))].sort();
+    return used.map(t=>({name:"Équipe "+TEAMS[t].n, color:TEAMS[t].c, team:true, members:S.players.filter(p=>p.team===t).map(p=>p.name)}));
+  }
+  return S.players.map((p,i)=>({name:p.name, color:PCOL[i%PCOL.length], team:false, members:[p.name]}));
+}
+function newNums(n){ const pool=[]; for(let i=1;i<=20;i++) pool.push(i);
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];} return pool.slice(0,n); }
+
+/* ---------- Moteur générique : rejoue toutes les fléchettes ---------- */
+function compute(){
+  const e=E(), o=O(), sides=S.sides, n=sides.length;
+  e._cut = o.cut==="cut";
+  const st=e.init(sides,o,S);
+  const vis=sides.map(()=>0);
+  const isOut=i=>e.out?e.out(st,i):false;
+  const nextSide=c=>{ for(let k=1;k<=n;k++){const j=(c+k)%n; if(!isOut(j)) return j;} return c; };
+  const done=()=> e.done ? e.done(st,vis,o) : null;
+  let cur=S.starter%n, visit=[], winners=null, ev=null;
+  for(let i=0;i<S.darts.length;i++){
+    const d=S.darts[i]; visit.push(d);
+    const r=e.dart(st,cur,d,visit,vis[cur],o)||{};
+    if(r.ev) ev={t:r.ev,good:r.good,i};
+    if(r.win){ winners=[cur]; break; }
+    winners=done(); if(winners){ vis[cur]++; break; }
+    if(r.end||visit.length===3){
+      const r2=e.endVisit?e.endVisit(st,cur,visit,vis[cur],o,r)||{}:{};
+      if(r2.ev) ev={t:r2.ev,good:r2.good,i};
+      vis[cur]++; visit=[];
+      winners=done(); if(winners) break;
+      cur=nextSide(cur); if(isOut(cur)) cur=nextSide(cur);
+    }
+  }
+  const mem=sides[cur].members;
+  return {st,cur,visit,vis,winners,ev,thrower:mem[vis[cur]%mem.length]};
+}
+
+/* ---------- Rendu ---------- */
+function markSvg(k){
+  if(k<=0) return "";
+  let s='<svg class="mk" viewBox="0 0 26 26" aria-hidden="true"><line x1="7" y1="19" x2="19" y2="7" stroke="#f1ead8" stroke-width="2.6" stroke-linecap="round"/>';
+  if(k>=2) s+='<line x1="7" y1="7" x2="19" y2="19" stroke="#f1ead8" stroke-width="2.6" stroke-linecap="round"/>';
+  if(k>=3) s+='<circle cx="13" cy="13" r="11" fill="none" stroke="#5fd896" stroke-width="2.4"/>';
+  return s+'</svg>';
+}
+function legsHtml(i){ const l=S.legs[i]||0; return l?'<span class="legs" title="Manches gagnées">'+'<i></i>'.repeat(Math.min(l,8))+'</span>':""; }
+
+function render(){
+  const G=compute(), e=E(), o=O(), sides=S.sides, over=!!G.winners;
+  const lab=e.label(o); $("modeTag").textContent=e.name+(lab?" · "+lab:"");
+  const r=G.vis[G.cur];
+
+  if(e.table){
+    $("board").classList.add("hidden"); $("ctable").classList.remove("hidden");
+    let h='<table><thead><tr><th style="box-shadow:none"></th>';
+    sides.forEach((s,i)=>{ h+=`<th style="--c:${s.color}" class="${i===G.cur&&!over?"active":""}">${esc(s.name)}${S.legs[i]?' <span style="color:var(--gold)">'+"•".repeat(Math.min(S.legs[i],5))+'</span>':""}</th>`; });
+    h+='</tr></thead><tbody>';
+    CR.forEach(t=>{ const dead=G.st.s.every(x=>x.marks[t]>=3);
+      h+=`<tr><td class="tg${dead?" dead":""}">${t===25?"Bull":t}</td>`;
+      sides.forEach((s,i)=>{ h+=`<td style="--c:${s.color}" class="${i===G.cur&&!over?"colact":""}">${markSvg(G.st.s[i].marks[t])}</td>`; });
+      h+='</tr>'; });
+    h+='<tr class="pts"><td style="font-size:12px;font-family:var(--body);color:var(--muted);font-weight:700">PTS</td>';
+    sides.forEach((s,i)=>{ h+=`<td style="--c:${s.color}" class="${i===G.cur&&!over?"colact":""}">${G.st.s[i].pts}</td>`; });
+    $("ctable").innerHTML=h+'</tr></tbody></table>';
+  } else {
+    $("board").classList.remove("hidden"); $("ctable").classList.add("hidden");
+    const b=$("board"); b.className="board"+(sides.length===1?" one":"")+(sides.length>4?" many":"");
+    b.innerHTML=sides.map((s,i)=>{
+      const act=i===G.cur&&!over, out=e.out&&e.out(G.st,i);
+      const c=e.card(G.st,i,o,G.vis[i]);
+      const next=s.members[G.vis[i]%s.members.length];
+      const mem=s.team?'<div class="mem">'+s.members.map(m=>m===next&&act?"<b>"+esc(m)+"</b>":esc(m)).join(" · ")+'</div>':"";
+      return `<div class="pc${act?" active":""}${out?" out":""}" style="--c:${s.color}"><div class="nm"><span class="t">${esc(s.name)}</span>${legsHtml(i)}</div>${mem}
+        <div class="sc">${c.pre?"<small>"+c.pre+"</small>":""}${c.big}</div><div class="meta">${c.sub||""}</div></div>`;
+    }).join("");
+    if(sides.length>2){ const a=b.querySelector(".active"); if(a) a.scrollIntoView({block:"nearest"}); }
+  }
+
+  $("hint").textContent = over ? "" : (e.hint?e.hint(G.st,G.cur,G.visit,r,o):"");
+
+  // Volée
+  const kt=over?{}:(e.keys?e.keys(G.st,G.cur,r):{});
+  let vh="";
+  for(let i=0;i<3;i++){ const d=G.visit[i];
+    vh+= d?`<div class="slot f${d.m===2?" d":d.m===3?" t":""}">${lbl(d)}</div>`:`<div class="slot${i===G.visit.length?" next":""}">–</div>`; }
+  const vt=e.vtot?e.vtot(G.visit,G.st,G.cur,r):"";
+  vh+=`<div class="slot tot">${vt===""?"":vt}<small style="color:${sides[G.cur].color}">${esc(G.thrower)}</small></div>`;
+  $("visit").innerHTML=vh;
+
+  // Pavé
+  document.querySelectorAll("#mult button").forEach(b=>{ b.setAttribute("aria-pressed",String(+b.dataset.m===mult)); b.classList.toggle("tg",kt.mult===+b.dataset.m); });
+  const tg=new Set(kt.nums||[]);
+  const own={}; if(e.owners) e.owners(G.st).forEach(([num,i])=>{ if(!(e.out&&e.out(G.st,i))) own[num]=sides[i].color; });
+  const key=(nv,cls,txt,extra)=>`<button class="k${cls}${tg.has(nv)?" tg":""}" data-n="${nv}" ${extra||""}>${txt}${own[nv]?`<span class="own" style="--oc:${own[nv]}"></span>`:""}</button>`;
+  let k="";
+  if(e.keypad==="cricket"){
+    $("nums").className="nums cr";
+    CR.forEach(t=>{ const dead=G.st.s.every(x=>x.marks[t]>=3);
+      k+=key(t,(t===25?" sm bull":"")+(dead?" closed":""),t===25?(mult===2?"Bull":"25"):t,t===25&&mult===3?"disabled":""); });
+    k+='<button class="k sm miss" data-n="0">Raté</button><button class="k sm" data-act="rest" style="grid-column:span 2">Fin volée</button><button class="k sm undo" data-act="undo" style="grid-column:span 2">↶ Annuler</button>';
+  } else {
+    $("nums").className="nums";
+    for(let i=1;i<=20;i++) k+=key(i,"",i);
+    k+=key(25," sm bull",mult===2?"Bull":"25",mult===3?"disabled":"");
+    k+='<button class="k sm miss" data-n="0">Raté</button><button class="k sm" data-act="rest">Fin volée</button><button class="k sm undo" data-act="undo" style="grid-column:span 2">↶ Annuler</button>';
+  }
+  $("nums").innerHTML=k;
+
+  if(G.ev && G.ev.i===S.darts.length-1 && lastEv!==S.darts.length){ toast(G.ev.t,G.ev.good); buzz(G.ev.good?100:[60,40,60]); }
+  lastEv=S.darts.length;
+  if(over) showWin(G); else $("winModal").classList.add("hidden");
+}
+
+let toastT;
+function toast(t,good){ const el=$("toast"); el.textContent=t; el.classList.toggle("good",!!good); el.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("on"),950); }
+
+function showWin(G){
+  const e=E(), sides=S.sides, w=G.winners;
+  if(w.length>1){ $("winTitle").textContent="Égalité !"; $("winSub").textContent=w.map(i=>sides[i].name).join(" et ")+" finissent à égalité."; }
+  else { const s=sides[w[0]]; $("winTitle").innerHTML=`<span style="color:${s.color}">${esc(s.name)}</span> gagne !`;
+    $("winSub").textContent = s.team ? s.members.join(", ") : (S.mode==="x01"?"Finition "+lbl(S.darts[S.darts.length-1]):e.name); }
+  let h='<span></span><span class="h">Camp</span><span class="h">Résultat</span>';
+  sides.forEach((s,i)=>{ const st=e.stat(G.st,i); h+=`<span class="sw2" style="--c:${s.color}"></span><span>${esc(s.name)}${w.includes(i)?" 🏆":""}<br><small style="color:var(--muted)">${st[1]}</small></span><span style="text-align:right">${st[0]}</span>`; });
+  $("winStats").innerHTML=h;
+  $("wAgain").textContent = w.length>1 ? "Rejouer" : "Manche suivante";
+  $("winModal").classList.remove("hidden");
+}
+
+/* ---------- Actions ---------- */
+function throwDart(nv){
+  if(compute().winners) return;
+  const m=nv===0?1:mult; if(nv===25&&m===3) return;
+  S.darts.push({n:nv,m}); mult=1; buzz(12); save(); render();
+}
+function undo(){ if(!S.darts.length) return; S.darts.pop(); lastEv=S.darts.length; mult=1; save(); render(); buzz(20); }
+function restOfVisit(){ const G=compute(); if(G.winners) return; for(let i=G.visit.length;i<3;i++) S.darts.push({n:0,m:1}); mult=1; save(); render(); }
+
+$("mult").addEventListener("click",ev=>{ const b=ev.target.closest("button"); if(!b) return; const m=+b.dataset.m; mult=(mult===m&&m!==1)?1:m; render(); });
+$("nums").addEventListener("click",ev=>{ const b=ev.target.closest("button"); if(!b||b.disabled) return;
+  if(b.dataset.act==="undo") return undo(); if(b.dataset.act==="rest") return restOfVisit(); throwDart(+b.dataset.n); });
+
+/* ---------- Réglages ---------- */
+function renderSetup(){
+  $("modes").innerHTML=ORDER.map(id=>`<button class="mode" data-id="${id}" aria-pressed="${S.mode===id}"><b>${M[id].name}</b><span>${M[id].tag}</span></button>`).join("");
+  $("setupRules").innerHTML=E().rules;
+  const o=O();
+  $("opts").innerHTML=E().opts.map(x=>{
+    if(x.t==="bool") return `<button class="toggle" data-opt="${x.k}" aria-pressed="${!!o[x.k]}"><span>${x.l}<small>${x.sub||""}</small></span><span class="sw"></span></button>`;
+    return `<div class="optl">${x.l}</div><div class="seg">`+x.c.map(c=>{const v=Array.isArray(c)?c[0]:c, t=Array.isArray(c)?c[1]:c;
+      return `<button data-opt="${x.k}" data-v="${v}" aria-pressed="${String(o[x.k])===String(v)}">${t}</button>`;}).join("")+`</div>`;
+  }).join("");
+  $("teamsT").setAttribute("aria-pressed",String(S.teams));
+  $("plist").innerHTML=S.players.map((p,i)=>{
+    const c=S.teams?TEAMS[p.team].c:PCOL[i%PCOL.length];
+    return `<div class="prow"><button class="chip" style="--c:${c}" data-team="${i}" ${S.teams?"":"disabled"} aria-label="${S.teams?"Équipe "+TEAMS[p.team].n+", toucher pour changer":"Couleur du joueur"}">${S.teams?TEAMS[p.team].n:i+1}</button>
+      <input id="pn${i}" data-i="${i}" value="${esc(p.name)}" maxlength="16" aria-label="Nom du joueur ${i+1}">
+      ${S.players.length>1?`<button class="del" data-del="${i}" aria-label="Retirer">×</button>`:""}</div>`;
+  }).join("");
+  $("addP").classList.toggle("hidden",S.players.length>=8);
+  $("resumeBtn").classList.toggle("hidden",!(S.playing&&S.sides));
+  $("err").textContent="";
+}
+$("modes").addEventListener("click",ev=>{ const b=ev.target.closest(".mode"); if(!b) return; S.mode=b.dataset.id; save(); renderSetup(); });
+$("opts").addEventListener("click",ev=>{ const b=ev.target.closest("[data-opt]"); if(!b) return; const x=E().opts.find(q=>q.k===b.dataset.opt), o=O();
+  if(x.t==="bool") o[x.k]=!o[x.k]; else { const c=x.c.map(c=>Array.isArray(c)?c[0]:c).find(c=>String(c)===b.dataset.v); o[x.k]=c; }
+  save(); renderSetup(); });
+$("teamsT").addEventListener("click",()=>{ S.teams=!S.teams; if(S.teams) S.players.forEach((p,i)=>p.team=i%2); renderSetup(); });
+$("plist").addEventListener("input",ev=>{ if(ev.target.dataset.i!=null) S.players[+ev.target.dataset.i].name=ev.target.value; });
+$("plist").addEventListener("click",ev=>{
+  const d=ev.target.closest("[data-del]"); if(d){ S.players.splice(+d.dataset.del,1); renderSetup(); return; }
+  const t=ev.target.closest("[data-team]"); if(t&&S.teams){ const p=S.players[+t.dataset.team]; p.team=(p.team+1)%TEAMS.length; renderSetup(); }
+});
+$("addP").addEventListener("click",()=>{ const n=S.players.length; S.players.push({name:"Joueur "+(n+1),team:n%2}); renderSetup(); const i=$("pn"+n); if(i){i.focus();i.select();} });
+
+function showGame(){
+  $("setup").classList.add("hidden"); $("game").classList.remove("hidden");
+  ["menuBtn","modeTag","rulesBtn"].forEach(id=>$(id).classList.remove("hidden")); $("brandTxt").classList.add("hidden");
+  const e=E(); $("mult").classList.toggle("hidden",false);
+  lastEv=S.darts.length; render(); keepAwake();
+}
+function showSetup(){
+  $("game").classList.add("hidden"); $("setup").classList.remove("hidden");
+  ["menuBtn","modeTag","rulesBtn"].forEach(id=>$(id).classList.add("hidden")); $("brandTxt").classList.remove("hidden");
+  $("winModal").classList.add("hidden"); renderSetup();
+}
+$("startBtn").addEventListener("click",()=>{
+  S.players.forEach((p,i)=>{ p.name=p.name.trim()||("Joueur "+(i+1)); });
+  const sides=buildSides();
+  if(S.teams && sides.length<2){ $("err").textContent="Il faut au moins deux équipes différentes : touchez une pastille pour changer d'équipe."; return; }
+  if((E().min||1)>sides.length){ $("err").textContent=E().name+" se joue à "+E().min+" camps minimum : ajoutez un joueur."; return; }
+  S.sides=sides; S.nums=newNums(sides.length); S.legs=sides.map(()=>0); S.starter=0; S.darts=[]; S.playing=true; mult=1;
+  save(); showGame();
+});
+$("resumeBtn").addEventListener("click",showGame);
+$("menuBtn").addEventListener("click",()=>$("menuModal").classList.remove("hidden"));
+$("mClose").addEventListener("click",()=>$("menuModal").classList.add("hidden"));
+$("mRestart").addEventListener("click",()=>{ S.darts=[]; lastEv=0; save(); $("menuModal").classList.add("hidden"); render(); });
+$("mNew").addEventListener("click",()=>{ $("menuModal").classList.add("hidden"); S.playing=false; save(); showSetup(); });
+$("rulesBtn").addEventListener("click",()=>{ $("rTitle").textContent=E().name; $("rBody").innerHTML=E().rules; $("rulesModal").classList.remove("hidden"); });
+$("rClose").addEventListener("click",()=>$("rulesModal").classList.add("hidden"));
+$("wUndo").addEventListener("click",undo);
+$("wAgain").addEventListener("click",()=>{ const G=compute(); if(G.winners&&G.winners.length===1) S.legs[G.winners[0]]=(S.legs[G.winners[0]]||0)+1;
+  S.starter=(S.starter+1)%S.sides.length; S.darts=[]; S.nums=newNums(S.sides.length); lastEv=0; mult=1; save(); render(); });
+$("wNew").addEventListener("click",()=>{ S.playing=false; save(); showSetup(); });
+
+let lock=null;
+async function keepAwake(){ try{ if("wakeLock" in navigator&&!lock){ lock=await navigator.wakeLock.request("screen"); lock.addEventListener("release",()=>lock=null); } }catch(e){} }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&S.playing) keepAwake(); });
+
+load();
+if(S.playing&&S.sides) showGame(); else showSetup();
+})();
+if("serviceWorker" in navigator){ window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); }); }
+</script>
+</body>
+</html>
