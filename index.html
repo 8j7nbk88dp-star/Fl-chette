@@ -147,8 +147,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 .gl{display:flex;flex-direction:column;gap:8px;min-height:0;flex:0 1 auto}
 #game{flex-direction:column}
 /* Paysage : scores à gauche, pavé à droite */
-@media (orientation:landscape) and (max-height:620px){
-  .app{max-width:1100px;gap:6px;padding-top:calc(env(safe-area-inset-top) + 4px);padding-bottom:calc(env(safe-area-inset-bottom) + 6px)}
+@media (orientation:landscape) and (max-height:620px), (orientation:landscape) and (min-width:1000px){
+  .app{max-width:1400px;gap:6px;padding-top:calc(env(safe-area-inset-top) + 4px);padding-bottom:calc(env(safe-area-inset-bottom) + 6px)}
   .top{min-height:32px}
   .brand{font-size:17px}
   #game{flex-direction:row!important;gap:12px}
@@ -163,8 +163,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   .pc .sc{font-size:34px}
   .board.many .pc .sc{font-size:28px}
   .pad{flex:1 1 0;min-width:0;margin-top:0;justify-content:flex-end}
-  .mult button{height:calc((100dvh - 92px) / 6.4);min-height:30px;font-size:15px}
-  .k{height:calc((100dvh - 92px) / 6.4);min-height:30px;font-size:20px}
+  .mult button{height:min(calc((100dvh - 92px) / 6.4),96px);min-height:30px;font-size:15px}
+  .k{height:min(calc((100dvh - 92px) / 6.4),110px);min-height:30px;font-size:20px}
   .k.sm{font-size:15px}
   .slot{height:42px}
   .setup{display:grid;grid-template-columns:1fr 1fr;align-content:start;gap:14px 18px}
@@ -172,6 +172,80 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   .modes{grid-template-columns:repeat(3,1fr)}
   .setup > div:last-child{grid-column:1 / -1}
   .card{max-height:calc(100dvh - 24px)}
+}
+/* Caméra */
+.camview{position:fixed;inset:0;background:#000;z-index:25;display:flex;flex-direction:column}
+.camstage{position:relative;flex:1;min-height:0;overflow:hidden;touch-action:none}
+#camVideo,#camOver{position:absolute;inset:0;width:100%;height:100%}
+#camVideo{object-fit:contain;background:#000}
+.camhud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 10px) 8px calc(env(safe-area-inset-left) + 10px);display:flex;gap:10px;align-items:flex-start;justify-content:space-between;pointer-events:none;background:linear-gradient(rgba(0,0,0,.75),rgba(0,0,0,0))}
+.camhud .who{font-weight:700;font-size:15px}
+.camhud .big{font-family:var(--display);font-size:40px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.camhud .vs{display:flex;gap:5px;margin-top:6px}
+.camhud .vs span{min-width:44px;padding:3px 6px;border-radius:7px;background:rgba(26,33,30,.85);border:1px solid var(--line);font-family:var(--display);font-size:16px;text-align:center}
+.camstat{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;text-align:center;font-size:15px;font-weight:600;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8));pointer-events:none;text-wrap:balance}
+.camstat.warn{color:var(--gold)}
+.camlast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.8);font-family:var(--display);font-size:64px;font-weight:700;color:#fff;background:rgba(16,21,19,.85);border:2px solid var(--gold);padding:6px 26px;border-radius:18px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;white-space:nowrap}
+.camlast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.cambar{display:flex;flex-wrap:wrap;gap:6px;padding:8px calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px);background:var(--bg)}
+.cb{flex:1 1 calc(25% - 6px);min-width:70px;height:44px;border-radius:11px;background:var(--panel-2);border:1px solid var(--line);font-weight:700;font-size:14px}
+.cb.pri{background:var(--green);border-color:var(--green)}
+.cb.on{border-color:var(--gold);color:var(--gold)}
+.cb[disabled]{opacity:.35}
+@media (orientation:landscape) and (max-height:620px){
+  .camview{flex-direction:row}
+  .cambar{flex-direction:column;flex-wrap:nowrap;width:150px;padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 8px) 8px;overflow-y:auto}
+  .cb{flex:0 0 auto;height:38px;min-width:0}
+}
+/* Tablette (iPad) : tout en plus grand */
+@media (min-width:768px) and (min-height:700px){
+  body{font-size:18px}
+  .app{max-width:1000px;padding-left:calc(env(safe-area-inset-left) + 24px);padding-right:calc(env(safe-area-inset-right) + 24px);gap:14px}
+  .top{min-height:52px}
+  .brand{font-size:26px}
+  .ghost{font-size:17px;padding:10px 16px}.ghost.ic{width:48px}
+  .tag{font-size:15px}
+  .modes{grid-template-columns:repeat(3,1fr);gap:10px}
+  .mode{padding:14px 16px}.mode b{font-size:22px}.mode span{font-size:14.5px}
+  .rules{font-size:16.5px;padding:16px 18px}
+  .setup h2{font-size:16px}
+  .seg button{font-size:20px;padding:14px 0}
+  .prow input{font-size:19px;padding:14px 16px}
+  .cta{font-size:26px;padding:20px}
+  .board{grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .pc{padding:14px 16px;border-radius:18px}
+  .pc .nm{font-size:19px}.pc .mem{font-size:15px}
+  .pc .sc,.board.many .pc .sc{font-size:68px}
+  .pc .meta{font-size:15px}
+  .hint{font-size:22px;min-height:28px}
+  .visit{gap:10px}
+  .slot{height:72px;font-size:32px;border-radius:16px}
+  .slot.tot{font-size:34px}.slot.tot small{font-size:14px}
+  .mult{gap:10px}.nums{gap:10px}.pad{gap:10px}
+  .mult button{height:66px;font-size:22px;border-radius:16px}
+  .k{height:clamp(64px,9.4vh,124px);font-size:38px;border-radius:16px}
+  .k.sm{font-size:22px}
+  .k .own{width:12px;height:12px;top:7px;right:8px}
+  .ctable thead th{font-size:18px;padding:12px 6px;max-width:180px}
+  .ctable td.tg{font-size:28px;width:90px}
+  .ctable th,.ctable td{padding:7px 6px}
+  .ctable tr.pts td{font-size:36px}
+  .mk{width:36px;height:36px}
+  .card{max-width:560px;padding:28px}.card h3{font-size:36px}
+  .stats{font-size:18px}
+  .toast{font-size:52px;padding:16px 40px}
+  .camhud .big{font-size:64px}.camhud .who{font-size:20px}.camhud .vs span{font-size:22px;min-width:64px}
+  .camstat{font-size:19px;padding:14px}
+  .camlast{font-size:110px}
+  .cb{height:56px;font-size:17px}
+}
+@media (orientation:landscape) and (min-width:1000px) and (min-height:700px){
+  .app{max-width:1400px}
+  .gl{gap:12px}
+  .board{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .setup{display:grid;grid-template-columns:1fr 1fr}
+  .k{height:min(12vh,128px)}
+  .mult button{height:min(9vh,84px)}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -184,6 +258,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
       <span id="brandTxt">Fléchettes</span>
     </div>
     <span class="tag hidden" id="modeTag"></span>
+    <button class="ghost ic hidden" id="camBtn" aria-label="Comptage par caméra"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto" aria-hidden="true"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
     <button class="ghost ic hidden" id="rulesBtn" aria-label="Règles">?</button>
     <button class="ghost hidden" id="menuBtn">Menu</button>
   </div>
@@ -226,6 +301,16 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   </section>
 </div>
 
+<div class="camview hidden" id="cam">
+  <div class="camstage" id="camStage">
+    <video id="camVideo" playsinline muted autoplay></video>
+    <canvas id="camOver"></canvas>
+    <div class="camhud" id="camHud"></div>
+    <div class="camlast" id="camLast"></div>
+    <div class="camstat" id="camStat"></div>
+  </div>
+  <div class="cambar" id="camBar"></div>
+</div>
 <div class="toast" id="toast"></div>
 
 <div class="modal hidden" id="menuModal"><div class="card">
@@ -615,7 +700,8 @@ function render(){
   }
   $("nums").innerHTML=k;
 
-  if(G.ev && G.ev.i===S.darts.length-1 && lastEv!==S.darts.length){ toast(G.ev.t,G.ev.good); buzz(G.ev.good?100:[60,40,60]); }
+  if(G.ev && G.ev.i===S.darts.length-1 && lastEv!==S.darts.length){ toast(G.ev.t,G.ev.good); buzz(G.ev.good?100:[60,40,60]); if(CAM.on) say(G.ev.t.replace(/ ?!/g,""),true); }
+  if(CAM.on) camHud(G);
   lastEv=S.darts.length;
   if(over) showWin(G); else $("winModal").classList.add("hidden");
 }
@@ -683,13 +769,13 @@ $("addP").addEventListener("click",()=>{ const n=S.players.length; S.players.pus
 
 function showGame(){
   $("setup").classList.add("hidden"); $("game").classList.remove("hidden");
-  ["menuBtn","modeTag","rulesBtn"].forEach(id=>$(id).classList.remove("hidden")); $("brandTxt").classList.add("hidden");
+  ["menuBtn","modeTag","rulesBtn","camBtn"].forEach(id=>$(id).classList.remove("hidden")); $("brandTxt").classList.add("hidden");
   const e=E(); $("mult").classList.toggle("hidden",false);
   lastEv=S.darts.length; render(); keepAwake();
 }
 function showSetup(){
   $("game").classList.add("hidden"); $("setup").classList.remove("hidden");
-  ["menuBtn","modeTag","rulesBtn"].forEach(id=>$(id).classList.add("hidden")); $("brandTxt").classList.remove("hidden");
+  ["menuBtn","modeTag","rulesBtn","camBtn"].forEach(id=>$(id).classList.add("hidden")); $("brandTxt").classList.remove("hidden");
   $("winModal").classList.add("hidden"); renderSetup();
 }
 $("startBtn").addEventListener("click",()=>{
@@ -715,6 +801,263 @@ $("wNew").addEventListener("click",()=>{ S.playing=false; save(); showSetup(); }
 let lock=null;
 async function keepAwake(){ try{ if("wakeLock" in navigator&&!lock){ lock=await navigator.wakeLock.request("screen"); lock.addEventListener("release",()=>lock=null); } }catch(e){} }
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&S.playing) keepAwake(); });
+
+/* ================= Comptage par caméra ================= */
+const SEGS=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+const RING={bi:6.35,bo:15.9,ti:99,to:107,di:162,do:170};
+const CAL_BOARD=[[0,170],[170,0],[0,-170],[-170,0]];
+const CAL_TXT=["le bord extérieur du double 20 (en haut)","le bord extérieur du double 6 (à droite)","le bord extérieur du double 3 (en bas)","le bord extérieur du double 11 (à gauche)"];
+const CAL_KEY="flechettes.cal";
+function scoreAt(u,v){
+  const r=Math.hypot(u,v);
+  if(r>RING.do) return {n:0,m:1};
+  if(r<=RING.bi) return {n:25,m:2};
+  if(r<=RING.bo) return {n:25,m:1};
+  const a=(Math.atan2(u,v)*180/Math.PI+369)%360;
+  const n=SEGS[Math.floor(a/18)%20];
+  return {n, m:(r>=RING.ti&&r<=RING.to)?3:(r>=RING.di)?2:1};
+}
+function solveH(src,dst){
+  const A=[];
+  for(let i=0;i<4;i++){ const [x,y]=src[i],[u,v]=dst[i];
+    A.push([x,y,1,0,0,0,-u*x,-u*y,u]); A.push([0,0,0,x,y,1,-v*x,-v*y,v]); }
+  for(let c=0;c<8;c++){
+    let p=c; for(let r=c+1;r<8;r++) if(Math.abs(A[r][c])>Math.abs(A[p][c])) p=r;
+    [A[c],A[p]]=[A[p],A[c]]; const d=A[c][c]; if(Math.abs(d)<1e-12) return null;
+    for(let k=c;k<9;k++) A[c][k]/=d;
+    for(let r=0;r<8;r++) if(r!==c){ const f=A[r][c]; if(f) for(let k=c;k<9;k++) A[r][k]-=f*A[c][k]; }
+  }
+  return A.map(r=>r[8]);
+}
+function applyH(h,x,y){ const w=h[6]*x+h[7]*y+1; return [(h[0]*x+h[1]*y+h[2])/w,(h[3]*x+h[4]*y+h[5])/w]; }
+
+/* Différence entre deux images : pixels changés et plus grosse tache */
+function analyse(ref,cur,W,Hh,maskIdx,TH){
+  TH=TH||32; const N=W*Hh, bin=new Uint8Array(N); let count=0;
+  for(let k=0;k<maskIdx.length;k++){ const i=maskIdx[k], o=i*4;
+    const d=Math.max(Math.abs(ref[o]-cur[o]),Math.abs(ref[o+1]-cur[o+1]),Math.abs(ref[o+2]-cur[o+2]));
+    if(d>TH){ bin[i]=1; count++; } }
+  if(count<6) return {count,comp:null};
+  // dilatation 3x3 pour recoller un fût fin
+  const dil=new Uint8Array(N);
+  for(let y=1;y<Hh-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x;
+    if(bin[i]||bin[i-1]||bin[i+1]||bin[i-W]||bin[i+W]||bin[i-W-1]||bin[i-W+1]||bin[i+W-1]||bin[i+W+1]) dil[i]=1; }
+  const seen=new Uint8Array(N), stack=new Int32Array(N); let best=null;
+  for(let s0=0;s0<N;s0++){ if(!dil[s0]||seen[s0]) continue;
+    let sp=0; stack[sp++]=s0; seen[s0]=1; const xs=[],ys=[];
+    while(sp){ const i=stack[--sp]; const x=i%W, y=(i/W)|0;
+      if(bin[i]){ xs.push(x); ys.push(y); }
+      if(x>0&&dil[i-1]&&!seen[i-1]){seen[i-1]=1;stack[sp++]=i-1;}
+      if(x<W-1&&dil[i+1]&&!seen[i+1]){seen[i+1]=1;stack[sp++]=i+1;}
+      if(y>0&&dil[i-W]&&!seen[i-W]){seen[i-W]=1;stack[sp++]=i-W;}
+      if(y<Hh-1&&dil[i+W]&&!seen[i+W]){seen[i+W]=1;stack[sp++]=i+W;} }
+    if(!best||xs.length>best.n) best={xs,ys,n:xs.length};
+  }
+  return {count,comp:best};
+}
+/* Pointe : axe principal de la tache, côté le plus fin (l'empennage est large) */
+function tipOf(c){
+  const n=c.n; let mx=0,my=0; for(let i=0;i<n;i++){mx+=c.xs[i];my+=c.ys[i];} mx/=n; my/=n;
+  let sxx=0,syy=0,sxy=0; for(let i=0;i<n;i++){const dx=c.xs[i]-mx,dy=c.ys[i]-my; sxx+=dx*dx; syy+=dy*dy; sxy+=dx*dy;}
+  const th=0.5*Math.atan2(2*sxy,sxx-syy), ax=Math.cos(th), ay=Math.sin(th);
+  let tmin=1e9,tmax=-1e9; const t=new Float32Array(n);
+  for(let i=0;i<n;i++){ t[i]=(c.xs[i]-mx)*ax+(c.ys[i]-my)*ay; if(t[i]<tmin)tmin=t[i]; if(t[i]>tmax)tmax=t[i]; }
+  const L=tmax-tmin; if(L<6) return [mx,my];
+  let ca=0,cb=0; for(let i=0;i<n;i++){ if(t[i]<tmin+0.3*L) ca++; else if(t[i]>tmax-0.3*L) cb++; }
+  const lowEnd = ca<=cb; const lim = lowEnd ? tmin+0.025*L : tmax-0.025*L;
+  let px=0,py=0,k=0;
+  for(let i=0;i<n;i++){ if(lowEnd ? t[i]<=lim : t[i]>=lim){ px+=c.xs[i]; py+=c.ys[i]; k++; } }
+  return k?[px/k,py/k]:[mx,my];
+}
+const say_lbl=d=> d.n===0?"Raté": d.n===25?(d.m===2?"Bull":"25"): (d.m===3?"Triple ":d.m===2?"Double ":"")+d.n;
+
+const CAM={on:false,stream:null,state:"off",H:null,Hinv:null,W:400,Hh:0,aspect:0,maskIdx:null,maskN:0,moveTh:6,
+  prev:null,ref:null,clean:null,stable:0,dirty:true,last:0,fix:false,sound:true,tips:[],calPts:[],cv:null,ctx:null,stat:"",warn:false};
+try{ CAM.sound = localStorage.getItem("flechettes.sound")!=="0"; }catch(e){}
+
+function say(t,force){ if(!CAM.sound||!t) return; try{ const u=new SpeechSynthesisUtterance(t); u.lang="fr-FR"; u.rate=1.05; if(!force) speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
+function camStatus(t,warn){ CAM.stat=t; CAM.warn=!!warn; const el=$("camStat"); el.textContent=t; el.classList.toggle("warn",!!warn); }
+let lastT;
+function flash(t){ const el=$("camLast"); el.textContent=t; el.classList.add("on"); clearTimeout(lastT); lastT=setTimeout(()=>el.classList.remove("on"),1400); }
+
+function loadCal(){ try{ const c=JSON.parse(localStorage.getItem(CAL_KEY)||"null"); return c&&c.pts&&c.pts.length===4?c:null; }catch(e){ return null; } }
+function setCal(pts){
+  CAM.calPts=pts; CAM.H=solveH(pts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,pts); buildMask();
+}
+function buildMask(){
+  if(!CAM.H||!CAM.Hh) return;
+  const W=CAM.W,Hh=CAM.Hh,idx=[];
+  for(let y=0;y<Hh;y++) for(let x=0;x<W;x++){ const b=applyH(CAM.H,x/W,y/Hh); if(Math.hypot(b[0],b[1])<=205) idx.push(y*W+x); }
+  CAM.maskIdx=Int32Array.from(idx); CAM.maskN=idx.length; CAM.moveTh=Math.max(4,Math.round(CAM.maskN/3*0.004));
+  CAM.prev=CAM.ref=CAM.clean=null; CAM.dirty=true; CAM.stable=0;
+}
+function grab(v){ CAM.ctx.drawImage(v,0,0,CAM.W,CAM.Hh); return CAM.ctx.getImageData(0,0,CAM.W,CAM.Hh).data; }
+function motion(a,b){ let c=0; const m=CAM.maskIdx; for(let k=0;k<m.length;k+=3){ const o=m[k]*4;
+  if(Math.max(Math.abs(a[o]-b[o]),Math.abs(a[o+1]-b[o+1]),Math.abs(a[o+2]-b[o+2]))>30) c++; } return c; }
+
+function contentRect(){
+  const v=$("camVideo"), st=$("camStage"), cw=st.clientWidth, ch=st.clientHeight, vw=v.videoWidth||16, vh=v.videoHeight||9;
+  const sc=Math.min(cw/vw,ch/vh); return {ox:(cw-vw*sc)/2, oy:(ch-vh*sc)/2, w:vw*sc, h:vh*sc, cw, ch};
+}
+function ensureSize(v){
+  const asp=v.videoWidth/v.videoHeight;
+  if(Math.abs(asp-CAM.aspect)>0.01){
+    CAM.aspect=asp; CAM.W=asp>=1?400:300; CAM.Hh=Math.round(CAM.W/asp);
+    CAM.cv.width=CAM.W; CAM.cv.height=CAM.Hh;
+    const c=loadCal();
+    if(c && Math.abs(c.aspect-asp)<0.02){ setCal(c.pts); if(CAM.state==="off") camReady(); }
+    else { CAM.H=null; if(CAM.state!=="cal") startCal(c?"L'orientation a changé : recalibrez.":""); }
+  }
+  const o=$("camOver"), r=contentRect(), dpr=window.devicePixelRatio||1;
+  if(o.width!==Math.round(r.cw*dpr)||o.height!==Math.round(r.ch*dpr)){ o.width=Math.round(r.cw*dpr); o.height=Math.round(r.ch*dpr); }
+}
+function drawOverlay(){
+  const o=$("camOver"), g=o.getContext("2d"), r=contentRect(), dpr=window.devicePixelRatio||1;
+  g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,r.cw,r.ch);
+  const P=(nx,ny)=>[r.ox+nx*r.w, r.oy+ny*r.h];
+  if(CAM.Hinv){
+    const B=(u,v)=>{ const n=applyH(CAM.Hinv,u,v); return P(n[0],n[1]); };
+    g.lineWidth=1.4; g.strokeStyle=CAM.state==="cal"?"rgba(233,185,73,.95)":"rgba(233,185,73,.45)";
+    [RING.bi,RING.bo,RING.ti,RING.to,RING.di,RING.do].forEach(rad=>{ g.beginPath();
+      for(let a=0;a<=64;a++){ const t=a/64*2*Math.PI, p=B(rad*Math.sin(t),rad*Math.cos(t)); a?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]); } g.stroke(); });
+    g.beginPath();
+    for(let i=0;i<20;i++){ const t=(i*18+9)*Math.PI/180, a=B(RING.bo*Math.sin(t),RING.bo*Math.cos(t)), b=B(RING.do*Math.sin(t),RING.do*Math.cos(t)); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); }
+    g.stroke();
+    if(CAM.state==="cal"){ g.fillStyle="rgba(233,185,73,.95)"; g.font="600 13px Barlow,sans-serif"; g.textAlign="center";
+      SEGS.forEach((n,i)=>{ const t=i*18*Math.PI/180, p=B(190*Math.sin(t),190*Math.cos(t)); g.fillText(n,p[0],p[1]+4); }); }
+  }
+  if(CAM.state==="cal"){ CAM.calPts.forEach((p,i)=>{ const q=P(p[0],p[1]); g.strokeStyle="#fff"; g.lineWidth=2;
+    g.beginPath(); g.arc(q[0],q[1],12,0,7); g.stroke(); g.beginPath(); g.moveTo(q[0]-18,q[1]); g.lineTo(q[0]+18,q[1]); g.moveTo(q[0],q[1]-18); g.lineTo(q[0],q[1]+18); g.stroke();
+    g.fillStyle="#fff"; g.font="700 13px Barlow,sans-serif"; g.fillText(["20","6","3","11"][i],q[0]+16,q[1]-14); }); }
+  CAM.tips.forEach(t=>{ const q=P(t.x,t.y); g.fillStyle="#d42a3e"; g.strokeStyle="#fff"; g.lineWidth=2;
+    g.beginPath(); g.arc(q[0],q[1],6,0,7); g.fill(); g.stroke();
+    g.font="700 15px Oswald,sans-serif"; g.textAlign="left"; g.lineWidth=3; g.strokeStyle="rgba(0,0,0,.8)"; g.strokeText(t.l,q[0]+9,q[1]-8); g.fillStyle="#fff"; g.fillText(t.l,q[0]+9,q[1]-8); });
+}
+
+function camTick(){
+  if(!CAM.on) return; requestAnimationFrame(camTick);
+  const now=performance.now(); if(now-CAM.last<85) return; CAM.last=now;
+  const v=$("camVideo"); if(v.readyState<2||!v.videoWidth) return;
+  ensureSize(v); drawOverlay();
+  if(CAM.state==="cal"||CAM.state==="off"||!CAM.maskIdx) return;
+  const cur=grab(v);
+  if(CAM.prev){ if(motion(CAM.prev,cur)>CAM.moveTh){ CAM.stable=0; CAM.dirty=true; } else CAM.stable++; }
+  CAM.prev=cur;
+  if(CAM.stable>=6&&CAM.dirty){ CAM.dirty=false; onStable(cur); }
+}
+function onStable(cur){
+  if(compute().winners){ CAM.state="wait"; }
+  if(!CAM.ref){ CAM.ref=cur; CAM.clean=cur; if(CAM.state==="detect") camStatus("Prêt : à "+compute().thrower+" de lancer"); return; }
+  if(CAM.state==="wait"){
+    const r=analyse(CAM.clean,cur,CAM.W,CAM.Hh,CAM.maskIdx);
+    if(r.count<CAM.maskN*0.004 && !compute().winners) startVisit(cur);
+    else camStatus(compute().winners?"Partie terminée":"Retirez les fléchettes de la cible (ou touchez « Cible vide »)",true);
+    return;
+  }
+  const r=analyse(CAM.ref,cur,CAM.W,CAM.Hh,CAM.maskIdx);
+  if(!r.comp||r.comp.n<10){ if(r.count<CAM.maskN*0.01) CAM.ref=cur; return; }
+  if(r.comp.n>CAM.maskN*0.08){ camStatus("Gros changement détecté : quelqu'un devant la cible ? Touchez « Cible vide » si la lumière a changé.",true); return; }
+  const tp=tipOf(r.comp), nx=tp[0]/CAM.W, ny=tp[1]/CAM.Hh, b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
+  CAM.ref=cur;
+  CAM.tips.push({x:nx,y:ny,l:lbl(d)});
+  S.darts.push({n:d.n,m:d.n===0?1:d.m}); mult=1; save(); render();
+  flash(lbl(d)); say(say_lbl(d)); buzz(30);
+  afterDart();
+}
+function afterDart(){
+  const G=compute();
+  if(G.winners){ CAM.state="wait"; camStatus("Partie terminée",false); return; }
+  if(G.visit.length===0&&S.darts.length){ CAM.state="wait"; camStatus("Volée terminée : retirez les fléchettes",true); }
+  else { CAM.state="detect"; camStatus("Fléchette "+(G.visit.length+1)+" : à "+G.thrower); }
+}
+function startVisit(cur){
+  CAM.ref=cur; CAM.clean=cur; CAM.state="detect"; CAM.tips=[];
+  const G=compute(); camStatus("À "+G.thrower+" de lancer"); say("À "+G.thrower);
+}
+function camReady(){
+  CAM.state=(compute().visit.length===0&&S.darts.length)?"wait":"detect";
+  CAM.ref=CAM.clean=CAM.prev=null; CAM.dirty=true; CAM.stable=0;
+  camStatus(CAM.state==="wait"?"Videz la cible pour commencer la volée":"Calibré. Gardez la cible vide un instant…");
+  camBar();
+}
+function startCal(msg){
+  CAM.state="cal"; CAM.calPts=[]; CAM.Hinv=null; CAM.H=null; CAM.maskIdx=null; CAM.fix=false;
+  camStatus((msg?msg+" ":"")+"Calibrage 1/4 : touchez "+CAL_TXT[0]+".",!!msg); camBar();
+}
+function camTap(ev){
+  const st=$("camStage").getBoundingClientRect(), r=contentRect();
+  const nx=(ev.clientX-st.left-r.ox)/r.w, ny=(ev.clientY-st.top-r.oy)/r.h;
+  if(nx<0||ny<0||nx>1||ny>1) return;
+  if(CAM.state==="cal"){
+    if(CAM.calPts.length>=4) return;
+    CAM.calPts.push([nx,ny]); buzz(15);
+    if(CAM.calPts.length<4) camStatus("Calibrage "+(CAM.calPts.length+1)+"/4 : touchez "+CAL_TXT[CAM.calPts.length]+".");
+    else { CAM.H=solveH(CAM.calPts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,CAM.calPts);
+      camStatus(CAM.H?"Le dessin doit coller aux anneaux de la cible. Retirez les fléchettes puis « Valider ».":"Points invalides, recommencez.",!CAM.H); }
+    camBar(); return;
+  }
+  if(CAM.fix&&CAM.H&&S.darts.length){
+    const b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
+    S.darts[S.darts.length-1]={n:d.n,m:d.n===0?1:d.m};
+    if(CAM.tips.length) CAM.tips[CAM.tips.length-1]={x:nx,y:ny,l:lbl(d)};
+    CAM.fix=false; save(); render(); flash(lbl(d)); say("Corrigé, "+say_lbl(d)); keepRefAfterManual(); camBar();
+  }
+}
+function keepRefAfterManual(){ const v=$("camVideo"); afterDart(); if(CAM.state==="detect"&&v.videoWidth&&CAM.maskIdx){ CAM.ref=grab(v); CAM.prev=CAM.ref; if(!CAM.clean) CAM.clean=CAM.ref; } }
+
+function camBar(){
+  const b=$("camBar");
+  if(CAM.state==="cal"){
+    b.innerHTML=`<button class="cb" data-c="recal">Recommencer</button><button class="cb pri" data-c="valid" ${CAM.calPts.length===4&&CAM.H?"":"disabled"}>Valider</button><button class="cb" data-c="close">Fermer</button>`;
+  } else {
+    b.innerHTML=`<button class="cb" data-c="undo">↶ Annuler</button><button class="cb" data-c="miss">Raté</button><button class="cb" data-c="rest">Fin volée</button><button class="cb${CAM.fix?" on":""}" data-c="fix">Corriger</button>`+
+      `<button class="cb" data-c="clean">Cible vide</button><button class="cb" data-c="recal">Calibrer</button><button class="cb${CAM.sound?" on":""}" data-c="sound">Voix ${CAM.sound?"oui":"non"}</button><button class="cb" data-c="close">Fermer</button>`;
+  }
+}
+$("camBar").addEventListener("click",ev=>{
+  const b=ev.target.closest("[data-c]"); if(!b||b.disabled) return; const c=b.dataset.c, v=$("camVideo");
+  if(c==="close") return closeCam();
+  if(c==="recal") return startCal("");
+  if(c==="valid"){ try{ localStorage.setItem(CAL_KEY,JSON.stringify({pts:CAM.calPts,aspect:CAM.aspect})); }catch(e){}
+    setCal(CAM.calPts); camReady(); return; }
+  if(c==="sound"){ CAM.sound=!CAM.sound; try{ localStorage.setItem("flechettes.sound",CAM.sound?"1":"0"); }catch(e){} if(CAM.sound) say("Voix activée"); camBar(); return; }
+  if(c==="fix"){ if(!S.darts.length) return; CAM.fix=!CAM.fix; camStatus(CAM.fix?"Touchez l'endroit exact où la dernière fléchette est plantée.":"Correction annulée",CAM.fix); camBar(); return; }
+  if(c==="clean"){ if(v.videoWidth&&CAM.maskIdx){ const cur=grab(v); CAM.prev=cur; if(compute().visit.length===0) startVisit(cur); else { CAM.ref=cur; CAM.state="detect"; camStatus("Nouvelle image de référence"); } } return; }
+  if(c==="undo"){ undo(); CAM.tips.pop(); keepRefAfterManual(); return; }
+  if(c==="miss"){ throwDart(0); CAM.tips.push({x:-1,y:-1,l:""}); flash("Raté"); say("Raté"); keepRefAfterManual(); return; }
+  if(c==="rest"){ restOfVisit(); keepRefAfterManual(); return; }
+});
+$("camStage").addEventListener("click",camTap);
+
+function camHud(G){
+  const e=E(), s=S.sides[G.cur]; let big="";
+  if(e.card){ try{ big=e.card(G.st,G.cur,O(),G.vis[G.cur]).big; }catch(x){} }
+  const vs=[0,1,2].map(i=>`<span>${G.visit[i]?lbl(G.visit[i]):"–"}</span>`).join("");
+  const hint=e.hint?e.hint(G.st,G.cur,G.visit,G.vis[G.cur],O()):"";
+  $("camHud").innerHTML=`<div><div class="who" style="color:${s.color}">${esc(s.name)}${s.team?" · "+esc(G.thrower):""}</div><div class="big">${big}</div><div class="vs">${vs}</div></div><div style="text-align:right;font-size:13px;color:var(--gold);max-width:55%;font-family:var(--display);letter-spacing:.03em">${esc(hint)}</div>`;
+}
+
+async function openCam(){
+  $("cam").classList.remove("hidden"); CAM.on=true; CAM.state="off"; CAM.aspect=0; CAM.tips=[]; CAM.fix=false;
+  if(!CAM.cv){ CAM.cv=document.createElement("canvas"); CAM.ctx=CAM.cv.getContext("2d",{willReadFrequently:true}); }
+  try{ if(CAM.sound) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){}
+  camBar(); render(); camStatus("Ouverture de la caméra…");
+  const v=$("camVideo");
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error("nomedia");
+    CAM.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}}});
+    v.srcObject=CAM.stream; await v.play();
+  }catch(e){
+    camStatus("Caméra indisponible. Elle ne marche que dans l'appli ouverte depuis ton adresse GitHub (pas dans l'aperçu Claude), après avoir autorisé l'accès à la caméra.",true);
+    $("camBar").innerHTML='<button class="cb" data-c="close">Fermer</button>'; return;
+  }
+  keepAwake(); requestAnimationFrame(camTick);
+}
+function closeCam(){
+  CAM.on=false; CAM.state="off"; try{ CAM.stream&&CAM.stream.getTracks().forEach(t=>t.stop()); }catch(e){} CAM.stream=null;
+  $("camVideo").srcObject=null; $("cam").classList.add("hidden"); render();
+}
+$("camBtn").addEventListener("click",openCam);
 
 load();
 if(S.playing&&S.sides) showGame(); else showSetup();
