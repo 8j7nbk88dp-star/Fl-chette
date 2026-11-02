@@ -258,6 +258,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
       <span id="brandTxt">Fléchettes</span>
     </div>
     <span class="tag hidden" id="modeTag"></span>
+    <button class="tag hidden" id="linkTag" style="color:var(--ink);cursor:pointer"></button>
     <button class="ghost ic hidden" id="camBtn" aria-label="Comptage par caméra"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto" aria-hidden="true"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
     <button class="ghost ic hidden" id="rulesBtn" aria-label="Règles">?</button>
     <button class="ghost hidden" id="menuBtn">Menu</button>
@@ -282,6 +283,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
       <button class="cta alt hidden" id="resumeBtn">Reprendre la partie</button>
       <button class="cta" id="startBtn">Lancer la partie</button>
+      <button class="cta alt" id="phoneCamBtn" style="font-size:17px">Utiliser ce téléphone comme caméra</button>
     </div>
   </section>
 
@@ -311,10 +313,27 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   </div>
   <div class="cambar" id="camBar"></div>
 </div>
+<div class="modal hidden" id="hostModal"><div class="card">
+  <h3>Relier un téléphone</h3>
+  <p>Sur le téléphone : ouvre l'appli, touche <b style="color:var(--ink)">« Utiliser ce téléphone comme caméra »</b> en bas de l'écran d'accueil et entre ce code :</p>
+  <div id="hostCode" style="font-family:var(--display);font-size:64px;font-weight:700;letter-spacing:.18em;text-align:center;color:var(--gold)">····</div>
+  <p id="hostStat" style="text-align:center"></p>
+  <button class="toggle" id="hostSound" aria-pressed="true"><span>Annoncer les scores ici<small>La tablette lit chaque fléchette à voix haute</small></span><span class="sw"></span></button>
+  <p style="font-size:13px">Les deux appareils ont besoin d'internet. Le code reste le même d'une fois sur l'autre.</p>
+  <div class="row"><button class="ghost hidden" id="hostStop" style="padding:12px">Couper la liaison</button><button class="cta" id="hostClose" style="font-size:18px;padding:12px">OK</button></div>
+</div></div>
+<div class="modal hidden" id="joinModal"><div class="card">
+  <h3>Téléphone caméra</h3>
+  <p>Sur la tablette (ou un autre écran), lance une partie puis <b style="color:var(--ink)">Menu → Relier un téléphone caméra</b>. Entre le code affiché :</p>
+  <input id="joinCode" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Code de liaison" style="font-family:var(--display);font-size:48px;font-weight:700;letter-spacing:.2em;text-align:center;text-transform:uppercase;padding:10px;border-radius:14px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);user-select:text;-webkit-user-select:text">
+  <p id="joinStat" style="text-align:center"></p>
+  <div class="row"><button class="ghost" id="joinClose" style="padding:12px">Annuler</button><button class="cta" id="joinGo" style="font-size:18px;padding:12px">Se connecter</button></div>
+</div></div>
 <div class="toast" id="toast"></div>
 
 <div class="modal hidden" id="menuModal"><div class="card">
   <h3>Menu</h3>
+  <button class="cta alt" id="mLink">Relier un téléphone caméra</button>
   <button class="cta alt" id="mRestart">Recommencer la manche</button>
   <button class="cta alt" id="mNew">Nouvelle partie</button>
   <button class="ghost" id="mClose" style="padding:12px">Retour au jeu</button>
@@ -701,7 +720,8 @@ function render(){
   $("nums").innerHTML=k;
 
   if(G.ev && G.ev.i===S.darts.length-1 && lastEv!==S.darts.length){ toast(G.ev.t,G.ev.good); buzz(G.ev.good?100:[60,40,60]); if(CAM.on) say(G.ev.t.replace(/ ?!/g,""),true); }
-  if(CAM.on) camHud(G);
+  if(CAM.on&&!CAM.remote) camOnInfo(camInfoLocal());
+  broadcast();
   lastEv=S.darts.length;
   if(over) showWin(G); else $("winModal").classList.add("hidden");
 }
@@ -774,6 +794,7 @@ function showGame(){
   lastEv=S.darts.length; render(); keepAwake();
 }
 function showSetup(){
+  try{ broadcast(); }catch(e){}
   $("game").classList.add("hidden"); $("setup").classList.remove("hidden");
   ["menuBtn","modeTag","rulesBtn","camBtn"].forEach(id=>$(id).classList.add("hidden")); $("brandTxt").classList.remove("hidden");
   $("winModal").classList.add("hidden"); renderSetup();
@@ -817,28 +838,29 @@ function scoreAt(u,v){
   const n=SEGS[Math.floor(a/18)%20];
   return {n, m:(r>=RING.ti&&r<=RING.to)?3:(r>=RING.di)?2:1};
 }
+function solveLin(A,b){ // Gauss avec pivot partiel
+  const n=b.length, M=A.map((r,i)=>r.concat([b[i]]));
+  for(let c=0;c<n;c++){ let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    [M[c],M[p]]=[M[p],M[c]]; const d=M[c][c]; if(Math.abs(d)<1e-12) return null;
+    for(let k=c;k<=n;k++) M[c][k]/=d;
+    for(let r=0;r<n;r++) if(r!==c){ const f=M[r][c]; if(f) for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; } }
+  return M.map(r=>r[n]);
+}
 function solveH(src,dst){
-  const A=[];
+  const A=[],b=[];
   for(let i=0;i<4;i++){ const [x,y]=src[i],[u,v]=dst[i];
-    A.push([x,y,1,0,0,0,-u*x,-u*y,u]); A.push([0,0,0,x,y,1,-v*x,-v*y,v]); }
-  for(let c=0;c<8;c++){
-    let p=c; for(let r=c+1;r<8;r++) if(Math.abs(A[r][c])>Math.abs(A[p][c])) p=r;
-    [A[c],A[p]]=[A[p],A[c]]; const d=A[c][c]; if(Math.abs(d)<1e-12) return null;
-    for(let k=c;k<9;k++) A[c][k]/=d;
-    for(let r=0;r<8;r++) if(r!==c){ const f=A[r][c]; if(f) for(let k=c;k<9;k++) A[r][k]-=f*A[c][k]; }
-  }
-  return A.map(r=>r[8]);
+    A.push([x,y,1,0,0,0,-u*x,-u*y]); b.push(u); A.push([0,0,0,x,y,1,-v*x,-v*y]); b.push(v); }
+  return solveLin(A,b);
 }
 function applyH(h,x,y){ const w=h[6]*x+h[7]*y+1; return [(h[0]*x+h[1]*y+h[2])/w,(h[3]*x+h[4]*y+h[5])/w]; }
 
-/* Différence entre deux images : pixels changés et plus grosse tache */
+/* --- Différence entre deux images : pixels changés et plus grosse tache --- */
 function analyse(ref,cur,W,Hh,maskIdx,TH){
   TH=TH||32; const N=W*Hh, bin=new Uint8Array(N); let count=0;
   for(let k=0;k<maskIdx.length;k++){ const i=maskIdx[k], o=i*4;
     const d=Math.max(Math.abs(ref[o]-cur[o]),Math.abs(ref[o+1]-cur[o+1]),Math.abs(ref[o+2]-cur[o+2]));
     if(d>TH){ bin[i]=1; count++; } }
   if(count<6) return {count,comp:null};
-  // dilatation 3x3 pour recoller un fût fin
   const dil=new Uint8Array(N);
   for(let y=1;y<Hh-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x;
     if(bin[i]||bin[i-1]||bin[i+1]||bin[i-W]||bin[i+W]||bin[i-W-1]||bin[i-W+1]||bin[i+W-1]||bin[i+W+1]) dil[i]=1; }
@@ -855,7 +877,7 @@ function analyse(ref,cur,W,Hh,maskIdx,TH){
   }
   return {count,comp:best};
 }
-/* Pointe : axe principal de la tache, côté le plus fin (l'empennage est large) */
+/* --- Pointe : axe principal de la tache, côté le plus fin (l'empennage est large) --- */
 function tipOf(c){
   const n=c.n; let mx=0,my=0; for(let i=0;i<n;i++){mx+=c.xs[i];my+=c.ys[i];} mx/=n; my/=n;
   let sxx=0,syy=0,sxy=0; for(let i=0;i<n;i++){const dx=c.xs[i]-mx,dy=c.ys[i]-my; sxx+=dx*dx; syy+=dy*dy; sxy+=dx*dy;}
@@ -864,26 +886,94 @@ function tipOf(c){
   for(let i=0;i<n;i++){ t[i]=(c.xs[i]-mx)*ax+(c.ys[i]-my)*ay; if(t[i]<tmin)tmin=t[i]; if(t[i]>tmax)tmax=t[i]; }
   const L=tmax-tmin; if(L<6) return [mx,my];
   let ca=0,cb=0; for(let i=0;i<n;i++){ if(t[i]<tmin+0.3*L) ca++; else if(t[i]>tmax-0.3*L) cb++; }
-  const lowEnd = ca<=cb; const lim = lowEnd ? tmin+0.025*L : tmax-0.025*L;
+  const lowEnd=ca<=cb, lim=lowEnd?tmin+0.025*L:tmax-0.025*L;
   let px=0,py=0,k=0;
-  for(let i=0;i<n;i++){ if(lowEnd ? t[i]<=lim : t[i]>=lim){ px+=c.xs[i]; py+=c.ys[i]; k++; } }
+  for(let i=0;i<n;i++){ if(lowEnd?t[i]<=lim:t[i]>=lim){ px+=c.xs[i]; py+=c.ys[i]; k++; } }
   return k?[px/k,py/k]:[mx,my];
+}
+
+/* --- Calibrage automatique : repère l'anneau des doubles (rouge/vert) --- */
+function colorClass(r,g,b){
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn; if(mx<45||d<0.38*mx) return 0;
+  let h; if(mx===r) h=((g-b)/d+6)%6; else if(mx===g) h=(b-r)/d+2; else h=(r-g)/d+4; h*=60;
+  if(h<=20||h>=330) return 1; if(h>=80&&h<=175) return 2; return 0;
+}
+function autoCal(d,W,H){
+  const N=W*H, cls=new Uint8Array(N); let nc=0;
+  for(let i=0;i<N;i++){ const o=i*4, c=colorClass(d[o],d[o+1],d[o+2]); cls[i]=c; if(c) nc++; }
+  if(nc<N*0.004) return {err:"Je ne vois pas les anneaux rouges et verts de la cible."};
+  const mk=new Uint8Array(N);
+  for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x; if(cls[i]||cls[i-1]||cls[i+1]||cls[i-W]||cls[i+W]) mk[i]=1; }
+  const lab=new Int32Array(N), stack=new Int32Array(N); let L=0, best=null;
+  for(let s0=0;s0<N;s0++){ if(!mk[s0]||lab[s0]) continue; L++;
+    let sp=0; stack[sp++]=s0; lab[s0]=L; let n=0,x0=W,x1=0,y0=H,y1=0,sx=0,sy=0;
+    while(sp){ const i=stack[--sp], x=i%W, y=(i/W)|0; n++; sx+=x; sy+=y; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+      for(const j of [i-1,i+1,i-W,i+W]) if(j>=0&&j<N&&mk[j]&&!lab[j]&&Math.abs((j%W)-x)<=1){ lab[j]=L; stack[sp++]=j; } }
+    const w=x1-x0+1, h=y1-y0+1, cx=sx/n, cy=sy/n;
+    const ring = w>0.12*Math.min(W,H) && h>0.12*Math.min(W,H) && n/(w*h)<0.4 && Math.abs(cx-(x0+x1)/2)<0.12*w && Math.abs(cy-(y0+y1)/2)<0.12*h && w/h<3 && h/w<3;
+    if(ring && (!best || w*h>best.area)) best={L,area:w*h,cx:(x0+x1)/2,cy:(y0+y1)/2,w,h};
+  }
+  if(!best) return {err:"Cible pas assez visible : cadrez-la en entier, bien éclairée."};
+  // bord extérieur de l'anneau, rayon par rayon
+  const pts=[], maxR=Math.max(best.w,best.h)*0.75;
+  for(let k=0;k<240;k++){ const a=k/240*2*Math.PI, dx=Math.cos(a), dy=Math.sin(a); let far=-1;
+    for(let r=maxR;r>2;r-=0.5){ const x=Math.round(best.cx+dx*r), y=Math.round(best.cy+dy*r); if(x<0||y<0||x>=W||y>=H) continue;
+      if(lab[y*W+x]===best.L){ far=r; break; } }
+    if(far>0) pts.push([best.cx+dx*far,best.cy+dy*far]); }
+  if(pts.length<120) return {err:"Anneau des doubles incomplet : la cible est-elle entière dans l'image ?"};
+  // ajustement d'une ellipse (conique) avec rejet des points aberrants
+  const fit=P=>{ const A=[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]], b=[0,0,0,0,0];
+    for(const [x0,y0] of P){ const x=(x0-best.cx)/100, y=(y0-best.cy)/100, v=[x*x,x*y,y*y,x,y];
+      for(let i=0;i<5;i++){ b[i]+=v[i]; for(let j=0;j<5;j++) A[i][j]+=v[i]*v[j]; } }
+    return solveLin(A,b); };
+  let P=pts, q=fit(P);
+  for(let it=0;it<2&&q;it++){ const res=P.map(([x0,y0])=>{ const x=(x0-best.cx)/100,y=(y0-best.cy)/100; return Math.abs(q[0]*x*x+q[1]*x*y+q[2]*y*y+q[3]*x+q[4]*y-1); });
+    const th=res.slice().sort((a,b)=>a-b)[Math.floor(res.length*0.8)]; P=P.filter((p,i)=>res[i]<=th); q=fit(P); }
+  if(!q) return {err:"Forme de la cible non reconnue."};
+  const [A,B,C,D,E]=q, det=4*A*C-B*B; if(det<=0) return {err:"Forme de la cible non reconnue."};
+  const ux=(B*E-2*C*D)/det, uy=(B*D-2*A*E)/det;              // centre (unités /100)
+  const K=1+(A*ux*ux+B*ux*uy+C*uy*uy);
+  const s11=A/K, s12=B/2/K, s22=C/K;                           // ellipse : uᵀSu = 1
+  const tr=s11+s22, dd=Math.sqrt(Math.max(0,(s11-s22)*(s11-s22)/4+s12*s12)), l1=tr/2+dd, l2=tr/2-dd;
+  if(l2<=0) return {err:"Forme de la cible non reconnue."};
+  let vx=s12, vy=l1-s11; if(Math.abs(vx)+Math.abs(vy)<1e-9){ vx=1; vy=0; } const vn=Math.hypot(vx,vy); vx/=vn; vy/=vn;
+  const r1=1/Math.sqrt(l1), r2=1/Math.sqrt(l2);
+  // S^{-1/2} = V diag(r1,r2) Vᵀ  (en pixels)
+  const m11=100*(r1*vx*vx+r2*vy*vy), m12=100*(r1-r2)*vx*vy, m22=100*(r1*vy*vy+r2*vx*vx);
+  const cx=best.cx+ux*100, cy=best.cy+uy*100;
+  if(Math.min(r1,r2)/Math.max(r1,r2)<0.35) return {err:"Cible vue trop de biais : placez le téléphone plus en face."};
+  const toImg=(dirx,diry,f)=>[cx+f*(m11*dirx+m12*diry), cy+f*(m12*dirx+m22*diry)];
+  // orientation : alternance rouge/vert des doubles et triples, le 20 a un double rouge
+  const col=new Int8Array(360);
+  for(let a=0;a<360;a++){ const t=a*Math.PI/180, dx=Math.sin(t), dy=-Math.cos(t); let s=0;
+    for(const f of [166/170,103/170]){ const [x,y]=toImg(dx,dy,f), xi=Math.round(x), yi=Math.round(y);
+      if(xi>=0&&yi>=0&&xi<W&&yi<H){ const c=cls[yi*W+xi]; s+= c===1?1:c===2?-1:0; } }
+    col[a]=Math.sign(s); }
+  let bestPsi=0,bestS=-1e9,nz=0; for(let a=0;a<360;a++) if(col[a]) nz++;
+  for(let psi=-18;psi<18;psi++){ let s=0;
+    for(let a=0;a<360;a++){ if(!col[a]) continue; const th=((a-psi)%360+360)%360, idx=Math.floor(((th+9)%360)/18); s+=col[a]*(idx%2===0?1:-1); }
+    if(s>bestS){ bestS=s; bestPsi=psi; } }
+  const conf=nz?bestS/nz:0;
+  if(nz<60||conf<0.45) return {err:"Je trouve la cible mais pas son orientation : gardez le téléphone droit (le 20 en haut)."};
+  const pr=bestPsi*Math.PI/180;
+  const pts4=CAL_BOARD.map(([u,v])=>{ const bx=u/170, by=-v/170, rx=bx*Math.cos(pr)-by*Math.sin(pr), ry=bx*Math.sin(pr)+by*Math.cos(pr); const p=toImg(rx,ry,1); return [p[0]/W,p[1]/H]; });
+  return {pts:pts4, conf, psi:bestPsi};
 }
 const say_lbl=d=> d.n===0?"Raté": d.n===25?(d.m===2?"Bull":"25"): (d.m===3?"Triple ":d.m===2?"Double ":"")+d.n;
 
-const CAM={on:false,stream:null,state:"off",H:null,Hinv:null,W:400,Hh:0,aspect:0,maskIdx:null,maskN:0,moveTh:6,
-  prev:null,ref:null,clean:null,stable:0,dirty:true,last:0,fix:false,sound:true,tips:[],calPts:[],cv:null,ctx:null,stat:"",warn:false};
+const CAM={on:false,remote:false,stream:null,state:"off",H:null,Hinv:null,W:400,Hh:0,aspect:0,maskIdx:null,maskN:0,moveTh:6,
+  prev:null,ref:null,clean:null,stable:0,dirty:true,last:0,fix:false,sound:true,tips:[],calPts:[],cv:null,ctx:null,
+  info:null,turnSeen:0,wasWin:false,autoTry:0,autoAt:0,glow:0};
 try{ CAM.sound = localStorage.getItem("flechettes.sound")!=="0"; }catch(e){}
 
 function say(t,force){ if(!CAM.sound||!t) return; try{ const u=new SpeechSynthesisUtterance(t); u.lang="fr-FR"; u.rate=1.05; if(!force) speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
-function camStatus(t,warn){ CAM.stat=t; CAM.warn=!!warn; const el=$("camStat"); el.textContent=t; el.classList.toggle("warn",!!warn); }
+function camStatus(t,warn){ const el=$("camStat"); el.textContent=t; el.classList.toggle("warn",!!warn); }
 let lastT;
 function flash(t){ const el=$("camLast"); el.textContent=t; el.classList.add("on"); clearTimeout(lastT); lastT=setTimeout(()=>el.classList.remove("on"),1400); }
 
 function loadCal(){ try{ const c=JSON.parse(localStorage.getItem(CAL_KEY)||"null"); return c&&c.pts&&c.pts.length===4?c:null; }catch(e){ return null; } }
-function setCal(pts){
-  CAM.calPts=pts; CAM.H=solveH(pts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,pts); buildMask();
-}
+function saveCal(){ try{ localStorage.setItem(CAL_KEY,JSON.stringify({pts:CAM.calPts,aspect:CAM.aspect})); }catch(e){} }
+function setCal(pts){ CAM.calPts=pts; CAM.H=solveH(pts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,pts); buildMask(); }
 function buildMask(){
   if(!CAM.H||!CAM.Hh) return;
   const W=CAM.W,Hh=CAM.Hh,idx=[];
@@ -894,7 +984,6 @@ function buildMask(){
 function grab(v){ CAM.ctx.drawImage(v,0,0,CAM.W,CAM.Hh); return CAM.ctx.getImageData(0,0,CAM.W,CAM.Hh).data; }
 function motion(a,b){ let c=0; const m=CAM.maskIdx; for(let k=0;k<m.length;k+=3){ const o=m[k]*4;
   if(Math.max(Math.abs(a[o]-b[o]),Math.abs(a[o+1]-b[o+1]),Math.abs(a[o+2]-b[o+2]))>30) c++; } return c; }
-
 function contentRect(){
   const v=$("camVideo"), st=$("camStage"), cw=st.clientWidth, ch=st.clientHeight, vw=v.videoWidth||16, vh=v.videoHeight||9;
   const sc=Math.min(cw/vw,ch/vh); return {ox:(cw-vw*sc)/2, oy:(ch-vh*sc)/2, w:vw*sc, h:vh*sc, cw, ch};
@@ -905,8 +994,8 @@ function ensureSize(v){
     CAM.aspect=asp; CAM.W=asp>=1?400:300; CAM.Hh=Math.round(CAM.W/asp);
     CAM.cv.width=CAM.W; CAM.cv.height=CAM.Hh;
     const c=loadCal();
-    if(c && Math.abs(c.aspect-asp)<0.02){ setCal(c.pts); if(CAM.state==="off") camReady(); }
-    else { CAM.H=null; if(CAM.state!=="cal") startCal(c?"L'orientation a changé : recalibrez.":""); }
+    if(c && Math.abs(c.aspect-asp)<0.02){ setCal(c.pts); camReady("Calibrage enregistré chargé."); }
+    else startAuto();
   }
   const o=$("camOver"), r=contentRect(), dpr=window.devicePixelRatio||1;
   if(o.width!==Math.round(r.cw*dpr)||o.height!==Math.round(r.ch*dpr)){ o.width=Math.round(r.cw*dpr); o.height=Math.round(r.ch*dpr); }
@@ -915,133 +1004,183 @@ function drawOverlay(){
   const o=$("camOver"), g=o.getContext("2d"), r=contentRect(), dpr=window.devicePixelRatio||1;
   g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,r.cw,r.ch);
   const P=(nx,ny)=>[r.ox+nx*r.w, r.oy+ny*r.h];
+  const strong = CAM.state==="cal" || performance.now()<CAM.glow;
   if(CAM.Hinv){
     const B=(u,v)=>{ const n=applyH(CAM.Hinv,u,v); return P(n[0],n[1]); };
-    g.lineWidth=1.4; g.strokeStyle=CAM.state==="cal"?"rgba(233,185,73,.95)":"rgba(233,185,73,.45)";
+    g.lineWidth=strong?2:1.4; g.strokeStyle=strong?"rgba(233,185,73,.95)":"rgba(233,185,73,.4)";
     [RING.bi,RING.bo,RING.ti,RING.to,RING.di,RING.do].forEach(rad=>{ g.beginPath();
       for(let a=0;a<=64;a++){ const t=a/64*2*Math.PI, p=B(rad*Math.sin(t),rad*Math.cos(t)); a?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]); } g.stroke(); });
     g.beginPath();
     for(let i=0;i<20;i++){ const t=(i*18+9)*Math.PI/180, a=B(RING.bo*Math.sin(t),RING.bo*Math.cos(t)), b=B(RING.do*Math.sin(t),RING.do*Math.cos(t)); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); }
     g.stroke();
-    if(CAM.state==="cal"){ g.fillStyle="rgba(233,185,73,.95)"; g.font="600 13px Barlow,sans-serif"; g.textAlign="center";
+    if(strong){ g.fillStyle="rgba(233,185,73,.95)"; g.font="600 13px Barlow,sans-serif"; g.textAlign="center";
       SEGS.forEach((n,i)=>{ const t=i*18*Math.PI/180, p=B(190*Math.sin(t),190*Math.cos(t)); g.fillText(n,p[0],p[1]+4); }); }
   }
-  if(CAM.state==="cal"){ CAM.calPts.forEach((p,i)=>{ const q=P(p[0],p[1]); g.strokeStyle="#fff"; g.lineWidth=2;
+  if(CAM.state==="cal"&&CAM.manual){ CAM.calPts.forEach((p,i)=>{ const q=P(p[0],p[1]); g.strokeStyle="#fff"; g.lineWidth=2;
     g.beginPath(); g.arc(q[0],q[1],12,0,7); g.stroke(); g.beginPath(); g.moveTo(q[0]-18,q[1]); g.lineTo(q[0]+18,q[1]); g.moveTo(q[0],q[1]-18); g.lineTo(q[0],q[1]+18); g.stroke();
-    g.fillStyle="#fff"; g.font="700 13px Barlow,sans-serif"; g.fillText(["20","6","3","11"][i],q[0]+16,q[1]-14); }); }
-  CAM.tips.forEach(t=>{ const q=P(t.x,t.y); g.fillStyle="#d42a3e"; g.strokeStyle="#fff"; g.lineWidth=2;
+    g.fillStyle="#fff"; g.font="700 13px Barlow,sans-serif"; g.textAlign="left"; g.fillText(["20","6","3","11"][i],q[0]+16,q[1]-14); }); }
+  CAM.tips.forEach(t=>{ if(t.x<0) return; const q=P(t.x,t.y); g.fillStyle="#d42a3e"; g.strokeStyle="#fff"; g.lineWidth=2;
     g.beginPath(); g.arc(q[0],q[1],6,0,7); g.fill(); g.stroke();
     g.font="700 15px Oswald,sans-serif"; g.textAlign="left"; g.lineWidth=3; g.strokeStyle="rgba(0,0,0,.8)"; g.strokeText(t.l,q[0]+9,q[1]-8); g.fillStyle="#fff"; g.fillText(t.l,q[0]+9,q[1]-8); });
 }
 
+/* --- Boucle d'analyse --- */
 function camTick(){
   if(!CAM.on) return; requestAnimationFrame(camTick);
   const now=performance.now(); if(now-CAM.last<85) return; CAM.last=now;
   const v=$("camVideo"); if(v.readyState<2||!v.videoWidth) return;
-  ensureSize(v); drawOverlay();
-  if(CAM.state==="cal"||CAM.state==="off"||!CAM.maskIdx) return;
+  ensureSize(v);
+  if(CAM.state==="auto" && now>CAM.autoAt) tryAuto(v);
+  drawOverlay();
+  if(CAM.state!=="detect"&&CAM.state!=="wait"||!CAM.maskIdx) return;
   const cur=grab(v);
   if(CAM.prev){ if(motion(CAM.prev,cur)>CAM.moveTh){ CAM.stable=0; CAM.dirty=true; } else CAM.stable++; }
   CAM.prev=cur;
   if(CAM.stable>=6&&CAM.dirty){ CAM.dirty=false; onStable(cur); }
 }
+function startAuto(){ CAM.state="auto"; CAM.manual=false; CAM.autoTry=0; CAM.autoAt=0; CAM.H=CAM.Hinv=null; CAM.maskIdx=null; CAM.tips=[];
+  camStatus("Recherche de la cible… cadrez-la en entier, téléphone immobile et droit."); camBar(); }
+function tryAuto(v){
+  CAM.autoTry++; CAM.autoAt=performance.now()+700;
+  const W=CAM.aspect>=1?640:480, H=Math.round(W/CAM.aspect), c=document.createElement("canvas"); c.width=W; c.height=H;
+  const g=c.getContext("2d",{willReadFrequently:true}); g.drawImage(v,0,0,W,H);
+  const r=autoCal(g.getImageData(0,0,W,H).data,W,H);
+  if(r.pts){ setCal(r.pts); saveCal(); CAM.glow=performance.now()+4000;
+    camReady("Cible repérée automatiquement. Si le dessin ne colle pas aux anneaux, touchez « Calibrer »."); buzz(40); return; }
+  if(CAM.autoTry%4===0) camStatus(r.err+" (essai "+CAM.autoTry+") — ou touchez « Manuel ».",true);
+}
 function onStable(cur){
-  if(compute().winners){ CAM.state="wait"; }
-  if(!CAM.ref){ CAM.ref=cur; CAM.clean=cur; if(CAM.state==="detect") camStatus("Prêt : à "+compute().thrower+" de lancer"); return; }
+  const I=CAM.info;
+  if(!CAM.ref){ CAM.ref=cur; CAM.clean=cur; return; }
+  if(!I||I.idle){ CAM.ref=cur; CAM.clean=cur; camStatus(CAM.remote?"En attente : lancez une partie sur la tablette.":"Lancez une partie.",true); return; }
+  if(I.win){ CAM.state="wait"; }
   if(CAM.state==="wait"){
     const r=analyse(CAM.clean,cur,CAM.W,CAM.Hh,CAM.maskIdx);
-    if(r.count<CAM.maskN*0.004 && !compute().winners) startVisit(cur);
-    else camStatus(compute().winners?"Partie terminée":"Retirez les fléchettes de la cible (ou touchez « Cible vide »)",true);
+    if(r.count<CAM.maskN*0.004 && !I.win) startVisit(cur);
+    else camStatus(I.win?"Partie terminée : "+(I.winName||"")+" gagne":"Retirez les fléchettes de la cible (ou touchez « Cible vide »)",!I.win);
     return;
   }
   const r=analyse(CAM.ref,cur,CAM.W,CAM.Hh,CAM.maskIdx);
   if(!r.comp||r.comp.n<10){ if(r.count<CAM.maskN*0.01) CAM.ref=cur; return; }
-  if(r.comp.n>CAM.maskN*0.08){ camStatus("Gros changement détecté : quelqu'un devant la cible ? Touchez « Cible vide » si la lumière a changé.",true); return; }
+  if(r.comp.n>CAM.maskN*0.08){ camStatus("Gros changement : quelqu'un devant la cible ? Touchez « Cible vide » si la lumière a changé.",true); return; }
   const tp=tipOf(r.comp), nx=tp[0]/CAM.W, ny=tp[1]/CAM.Hh, b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
-  CAM.ref=cur;
-  CAM.tips.push({x:nx,y:ny,l:lbl(d)});
-  S.darts.push({n:d.n,m:d.n===0?1:d.m}); mult=1; save(); render();
-  flash(lbl(d)); say(say_lbl(d)); buzz(30);
-  afterDart();
+  CAM.ref=cur; CAM.tips.push({x:nx,y:ny,l:lbl(d)});
+  flash(lbl(d)); if(!CAM.remote) say(say_lbl(d)); buzz(30);
+  camAct({t:"dart",n:d.n,m:d.n===0?1:d.m});
 }
-function afterDart(){
-  const G=compute();
-  if(G.winners){ CAM.state="wait"; camStatus("Partie terminée",false); return; }
-  if(G.visit.length===0&&S.darts.length){ CAM.state="wait"; camStatus("Volée terminée : retirez les fléchettes",true); }
-  else { CAM.state="detect"; camStatus("Fléchette "+(G.visit.length+1)+" : à "+G.thrower); }
+/* Infos de partie reçues (locales ou de la tablette) */
+function camOnInfo(I){
+  CAM.info=I; camHud(I);
+  if(!CAM.on||CAM.state==="auto"||CAM.state==="cal"||CAM.state==="off"||I.idle) return;
+  if(I.win){ CAM.state="wait"; CAM.wasWin=true; camStatus("Partie terminée : "+(I.winName||"")+" gagne"); CAM.turnSeen=I.turn; return; }
+  if(CAM.wasWin){ CAM.wasWin=false; CAM.state="wait"; CAM.turnSeen=I.turn; camStatus("Nouvelle manche : retirez les fléchettes",true); return; }
+  if(I.turn>CAM.turnSeen){ CAM.state="wait"; camStatus("Volée terminée : retirez les fléchettes",true); }
+  else if(I.turn<CAM.turnSeen){ CAM.state="detect"; refreshRef(); camStatus("Fléchette "+(I.vlen+1)+" : "+I.thrower); }
+  else if(CAM.state==="detect") camStatus("Fléchette "+(I.vlen+1)+" : "+I.thrower);
+  CAM.turnSeen=I.turn;
 }
 function startVisit(cur){
   CAM.ref=cur; CAM.clean=cur; CAM.state="detect"; CAM.tips=[];
-  const G=compute(); camStatus("À "+G.thrower+" de lancer"); say("À "+G.thrower);
+  const I=CAM.info||{}; camStatus("À "+(I.thrower||"vous")+" de lancer"); if(!CAM.remote) say("À "+(I.thrower||"vous"));
 }
-function camReady(){
-  CAM.state=(compute().visit.length===0&&S.darts.length)?"wait":"detect";
-  CAM.ref=CAM.clean=CAM.prev=null; CAM.dirty=true; CAM.stable=0;
-  camStatus(CAM.state==="wait"?"Videz la cible pour commencer la volée":"Calibré. Gardez la cible vide un instant…");
-  camBar();
+function camReady(msg){
+  CAM.state=(CAM.info&&CAM.info.win)?"wait":"detect"; CAM.manual=false;
+  CAM.ref=CAM.clean=CAM.prev=null; CAM.dirty=true; CAM.stable=0; CAM.turnSeen=CAM.info?CAM.info.turn:0;
+  camStatus((msg?msg+" ":"")+"Gardez la cible vide un instant…"); camBar();
 }
-function startCal(msg){
-  CAM.state="cal"; CAM.calPts=[]; CAM.Hinv=null; CAM.H=null; CAM.maskIdx=null; CAM.fix=false;
-  camStatus((msg?msg+" ":"")+"Calibrage 1/4 : touchez "+CAL_TXT[0]+".",!!msg); camBar();
+function startManual(){
+  CAM.state="cal"; CAM.manual=true; CAM.calPts=[]; CAM.Hinv=null; CAM.H=null; CAM.maskIdx=null; CAM.fix=false;
+  camStatus("Calibrage manuel 1/4 : touchez "+CAL_TXT[0]+"."); camBar();
 }
+function refreshRef(){ const v=$("camVideo"); if(CAM.state==="detect"&&v.videoWidth&&CAM.maskIdx){ CAM.ref=grab(v); CAM.prev=CAM.ref; if(!CAM.clean) CAM.clean=CAM.ref; } }
 function camTap(ev){
   const st=$("camStage").getBoundingClientRect(), r=contentRect();
   const nx=(ev.clientX-st.left-r.ox)/r.w, ny=(ev.clientY-st.top-r.oy)/r.h;
   if(nx<0||ny<0||nx>1||ny>1) return;
-  if(CAM.state==="cal"){
+  if(CAM.state==="cal"&&CAM.manual){
     if(CAM.calPts.length>=4) return;
     CAM.calPts.push([nx,ny]); buzz(15);
-    if(CAM.calPts.length<4) camStatus("Calibrage "+(CAM.calPts.length+1)+"/4 : touchez "+CAL_TXT[CAM.calPts.length]+".");
+    if(CAM.calPts.length<4) camStatus("Calibrage manuel "+(CAM.calPts.length+1)+"/4 : touchez "+CAL_TXT[CAM.calPts.length]+".");
     else { CAM.H=solveH(CAM.calPts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,CAM.calPts);
-      camStatus(CAM.H?"Le dessin doit coller aux anneaux de la cible. Retirez les fléchettes puis « Valider ».":"Points invalides, recommencez.",!CAM.H); }
+      camStatus(CAM.H?"Le dessin doit coller aux anneaux. Retirez les fléchettes puis « Valider ».":"Points invalides, recommencez.",!CAM.H); }
     camBar(); return;
   }
-  if(CAM.fix&&CAM.H&&S.darts.length){
+  if(CAM.fix&&CAM.H){
     const b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
-    S.darts[S.darts.length-1]={n:d.n,m:d.n===0?1:d.m};
     if(CAM.tips.length) CAM.tips[CAM.tips.length-1]={x:nx,y:ny,l:lbl(d)};
-    CAM.fix=false; save(); render(); flash(lbl(d)); say("Corrigé, "+say_lbl(d)); keepRefAfterManual(); camBar();
+    CAM.fix=false; flash(lbl(d)); if(!CAM.remote) say("Corrigé, "+say_lbl(d));
+    camAct({t:"fix",n:d.n,m:d.n===0?1:d.m}); refreshRef(); camBar();
   }
 }
-function keepRefAfterManual(){ const v=$("camVideo"); afterDart(); if(CAM.state==="detect"&&v.videoWidth&&CAM.maskIdx){ CAM.ref=grab(v); CAM.prev=CAM.ref; if(!CAM.clean) CAM.clean=CAM.ref; } }
+
+/* --- Actions : appliquées ici, ou envoyées à la tablette --- */
+function camAct(msg){
+  if(CAM.remote){ if(LINK.conn&&LINK.conn.open){ try{ LINK.conn.send(msg); }catch(e){} } else camStatus("Pas de liaison avec la tablette : touchez « Fermer » puis reconnectez.",true); }
+  else localApply(msg,false);
+}
+function localApply(msg,fromPhone){
+  if(!S.playing||!S.sides) return;
+  const G=compute();
+  if(msg.t==="dart"){ if(G.winners) return; S.darts.push({n:msg.n,m:msg.n===0?1:msg.m}); }
+  else if(msg.t==="miss"){ if(G.winners) return; S.darts.push({n:0,m:1}); }
+  else if(msg.t==="rest"){ if(G.winners) return; for(let i=G.visit.length;i<3;i++) S.darts.push({n:0,m:1}); }
+  else if(msg.t==="undo"){ if(!S.darts.length) return; S.darts.pop(); lastEv=S.darts.length; }
+  else if(msg.t==="fix"){ if(!S.darts.length) return; S.darts[S.darts.length-1]={n:msg.n,m:msg.n===0?1:msg.m}; lastEv=S.darts.length-1; }
+  else return;
+  mult=1; save();
+  if(fromPhone&&(msg.t==="dart"||msg.t==="fix"||msg.t==="miss")){ const d={n:msg.n||0,m:msg.m||1}; toast(lbl(d),true); say(say_lbl(d)); }
+  render();
+}
+function camInfoLocal(){
+  if(!S.playing||!S.sides) return {t:"state",idle:true};
+  const G=compute(), e=E(), s=S.sides[G.cur]; let big="";
+  try{ if(e.card) big=String(e.card(G.st,G.cur,O(),G.vis[G.cur]).big); }catch(x){}
+  let hint=""; try{ hint=e.hint?e.hint(G.st,G.cur,G.visit,G.vis[G.cur],O()):""; }catch(x){}
+  return {t:"state", win:!!G.winners, winName:G.winners&&G.winners.length===1?S.sides[G.winners[0]].name:"",
+    turn:G.vis.reduce((a,b)=>a+b,0), n:S.darts.length, vlen:G.visit.length, thrower:G.thrower, name:s.name, team:s.team, color:s.color,
+    big, hint, visit:G.visit.map(lbl), mode:e.name};
+}
 
 function camBar(){
   const b=$("camBar");
   if(CAM.state==="cal"){
-    b.innerHTML=`<button class="cb" data-c="recal">Recommencer</button><button class="cb pri" data-c="valid" ${CAM.calPts.length===4&&CAM.H?"":"disabled"}>Valider</button><button class="cb" data-c="close">Fermer</button>`;
+    b.innerHTML=`<button class="cb" data-c="manual">Recommencer</button><button class="cb pri" data-c="valid" ${CAM.calPts.length===4&&CAM.H?"":"disabled"}>Valider</button><button class="cb" data-c="auto">Auto</button><button class="cb" data-c="close">Fermer</button>`;
+  } else if(CAM.state==="auto"){
+    b.innerHTML=`<button class="cb" data-c="manual">Manuel</button><button class="cb" data-c="close">Fermer</button>`;
   } else {
     b.innerHTML=`<button class="cb" data-c="undo">↶ Annuler</button><button class="cb" data-c="miss">Raté</button><button class="cb" data-c="rest">Fin volée</button><button class="cb${CAM.fix?" on":""}" data-c="fix">Corriger</button>`+
-      `<button class="cb" data-c="clean">Cible vide</button><button class="cb" data-c="recal">Calibrer</button><button class="cb${CAM.sound?" on":""}" data-c="sound">Voix ${CAM.sound?"oui":"non"}</button><button class="cb" data-c="close">Fermer</button>`;
+      `<button class="cb" data-c="clean">Cible vide</button><button class="cb" data-c="auto">Calibrer</button>`+
+      (CAM.remote?"":`<button class="cb${CAM.sound?" on":""}" data-c="sound">Voix ${CAM.sound?"oui":"non"}</button>`)+`<button class="cb" data-c="close">Fermer</button>`;
   }
 }
 $("camBar").addEventListener("click",ev=>{
   const b=ev.target.closest("[data-c]"); if(!b||b.disabled) return; const c=b.dataset.c, v=$("camVideo");
   if(c==="close") return closeCam();
-  if(c==="recal") return startCal("");
-  if(c==="valid"){ try{ localStorage.setItem(CAL_KEY,JSON.stringify({pts:CAM.calPts,aspect:CAM.aspect})); }catch(e){}
-    setCal(CAM.calPts); camReady(); return; }
+  if(c==="manual") return startManual();
+  if(c==="auto"){ try{ localStorage.removeItem(CAL_KEY); }catch(e){} return startAuto(); }
+  if(c==="valid"){ setCal(CAM.calPts); saveCal(); camReady("Calibré."); return; }
   if(c==="sound"){ CAM.sound=!CAM.sound; try{ localStorage.setItem("flechettes.sound",CAM.sound?"1":"0"); }catch(e){} if(CAM.sound) say("Voix activée"); camBar(); return; }
-  if(c==="fix"){ if(!S.darts.length) return; CAM.fix=!CAM.fix; camStatus(CAM.fix?"Touchez l'endroit exact où la dernière fléchette est plantée.":"Correction annulée",CAM.fix); camBar(); return; }
-  if(c==="clean"){ if(v.videoWidth&&CAM.maskIdx){ const cur=grab(v); CAM.prev=cur; if(compute().visit.length===0) startVisit(cur); else { CAM.ref=cur; CAM.state="detect"; camStatus("Nouvelle image de référence"); } } return; }
-  if(c==="undo"){ undo(); CAM.tips.pop(); keepRefAfterManual(); return; }
-  if(c==="miss"){ throwDart(0); CAM.tips.push({x:-1,y:-1,l:""}); flash("Raté"); say("Raté"); keepRefAfterManual(); return; }
-  if(c==="rest"){ restOfVisit(); keepRefAfterManual(); return; }
+  if(c==="fix"){ CAM.fix=!CAM.fix; camStatus(CAM.fix?"Touchez l'endroit exact où la dernière fléchette est plantée.":"Correction annulée",CAM.fix); camBar(); return; }
+  if(c==="clean"){ if(v.videoWidth&&CAM.maskIdx){ const cur=grab(v); CAM.prev=cur; if(CAM.state==="wait") startVisit(cur); else { CAM.ref=cur; CAM.state="detect"; camStatus("Nouvelle image de référence"); } } return; }
+  if(c==="undo"){ CAM.tips.pop(); camAct({t:"undo"}); refreshRef(); return; }
+  if(c==="miss"){ CAM.tips.push({x:-1,y:-1,l:""}); flash("Raté"); if(!CAM.remote) say("Raté"); camAct({t:"miss"}); refreshRef(); return; }
+  if(c==="rest"){ camAct({t:"rest"}); refreshRef(); return; }
 });
 $("camStage").addEventListener("click",camTap);
 
-function camHud(G){
-  const e=E(), s=S.sides[G.cur]; let big="";
-  if(e.card){ try{ big=e.card(G.st,G.cur,O(),G.vis[G.cur]).big; }catch(x){} }
-  const vs=[0,1,2].map(i=>`<span>${G.visit[i]?lbl(G.visit[i]):"–"}</span>`).join("");
-  const hint=e.hint?e.hint(G.st,G.cur,G.visit,G.vis[G.cur],O()):"";
-  $("camHud").innerHTML=`<div><div class="who" style="color:${s.color}">${esc(s.name)}${s.team?" · "+esc(G.thrower):""}</div><div class="big">${big}</div><div class="vs">${vs}</div></div><div style="text-align:right;font-size:13px;color:var(--gold);max-width:55%;font-family:var(--display);letter-spacing:.03em">${esc(hint)}</div>`;
+function camHud(I){
+  if(!I||I.idle){ $("camHud").innerHTML=`<div><div class="who">${CAM.remote?"Relié à la tablette":"Aucune partie"}</div></div>`; return; }
+  const vs=[0,1,2].map(i=>`<span>${I.visit[i]||"–"}</span>`).join("");
+  $("camHud").innerHTML=`<div><div class="who" style="color:${I.color}">${esc(I.name)}${I.team?" · "+esc(I.thrower):""}</div><div class="big">${esc(I.big)}</div><div class="vs">${vs}</div></div><div style="text-align:right;font-size:13px;color:var(--gold);max-width:55%;font-family:var(--display);letter-spacing:.03em">${CAM.remote?'<span style="color:#5fd896">● Tablette reliée</span><br>':""}${esc(I.hint)}</div>`;
 }
 
-async function openCam(){
-  $("cam").classList.remove("hidden"); CAM.on=true; CAM.state="off"; CAM.aspect=0; CAM.tips=[]; CAM.fix=false;
+async function openCam(remote){
+  CAM.remote=!!remote;
+  $("cam").classList.remove("hidden"); CAM.on=true; CAM.state="off"; CAM.aspect=0; CAM.tips=[]; CAM.fix=false; CAM.wasWin=false;
   if(!CAM.cv){ CAM.cv=document.createElement("canvas"); CAM.ctx=CAM.cv.getContext("2d",{willReadFrequently:true}); }
-  try{ if(CAM.sound) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){}
-  camBar(); render(); camStatus("Ouverture de la caméra…");
+  try{ speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){}
+  if(!CAM.remote) CAM.info=camInfoLocal();
+  camHud(CAM.info); camBar(); camStatus("Ouverture de la caméra…");
   const v=$("camVideo");
   try{
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error("nomedia");
@@ -1055,9 +1194,77 @@ async function openCam(){
 }
 function closeCam(){
   CAM.on=false; CAM.state="off"; try{ CAM.stream&&CAM.stream.getTracks().forEach(t=>t.stop()); }catch(e){} CAM.stream=null;
-  $("camVideo").srcObject=null; $("cam").classList.add("hidden"); render();
+  $("camVideo").srcObject=null; $("cam").classList.add("hidden");
+  if(CAM.remote){ CAM.remote=false; linkStop(); }
+  render();
 }
-$("camBtn").addEventListener("click",openCam);
+$("camBtn").addEventListener("click",()=>openCam(false));
+
+/* ================= Liaison téléphone ⇄ tablette (PeerJS) ================= */
+const PEER_PREFIX="flechettes-tae-";
+const LINK={peer:null,conns:[],conn:null,role:null,code:""};
+function loadPeer(){ return new Promise((res,rej)=>{ if(window.Peer) return res();
+  const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";
+  s.onload=()=>res(); s.onerror=()=>rej(new Error("load")); document.head.appendChild(s); }); }
+function newCode(){ const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let c=""; for(let i=0;i<4;i++) c+=A[Math.floor(Math.random()*A.length)]; return c; }
+function linkStop(){ try{ LINK.conns.forEach(c=>c.close()); LINK.conn&&LINK.conn.close(); LINK.peer&&LINK.peer.destroy(); }catch(e){}
+  LINK.peer=null; LINK.conns=[]; LINK.conn=null; LINK.role=null; linkUi(); }
+function broadcast(){ if(LINK.role!=="host"||!LINK.conns.length) return; const I=camInfoLocal(); LINK.conns.forEach(c=>{ try{ if(c.open) c.send(I); }catch(e){} }); }
+function linkUi(){
+  const n=LINK.role==="host"?LINK.conns.filter(c=>c.open).length:0;
+  $("linkTag").classList.toggle("hidden",!(LINK.role==="host"));
+  $("linkTag").innerHTML = n?'<span style="color:#5fd896">●</span> Caméra reliée':'<span style="color:var(--gold)">●</span> Code '+LINK.code;
+  if($("hostStat")) $("hostStat").innerHTML = LINK.role!=="host" ? "" : n ? '<b style="color:#5fd896">Téléphone relié ✓</b> Les fléchettes détectées arrivent ici.' : "En attente du téléphone…";
+  $("hostCode").textContent=LINK.code||"····";
+  $("hostStop").classList.toggle("hidden",LINK.role!=="host");
+  $("hostSound").setAttribute("aria-pressed",String(CAM.sound));
+}
+async function hostStart(){
+  try{ speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){}
+  if(LINK.role==="host"&&LINK.peer&&!LINK.peer.destroyed){ linkUi(); return; }
+  $("hostStat").textContent="Connexion au service de liaison…";
+  try{ await loadPeer(); }catch(e){ $("hostStat").textContent="Impossible de charger la liaison : il faut une connexion internet."; return; }
+  let code; try{ code=localStorage.getItem("flechettes.code"); }catch(e){} if(!code) code=newCode();
+  const go=c=>{
+    LINK.code=c; LINK.role="host"; try{ localStorage.setItem("flechettes.code",c); }catch(e){}
+    const p=new Peer(PEER_PREFIX+c); LINK.peer=p;
+    p.on("open",()=>linkUi());
+    p.on("connection",conn=>{
+      conn.on("open",()=>{ LINK.conns.push(conn); linkUi(); broadcast(); buzz(60); });
+      conn.on("data",m=>{ if(m&&m.t) localApply(m,true); });
+      conn.on("close",()=>{ LINK.conns=LINK.conns.filter(x=>x!==conn); linkUi(); });
+    });
+    p.on("disconnected",()=>{ try{ if(!p.destroyed) p.reconnect(); }catch(e){} });
+    p.on("error",e=>{ if(e.type==="unavailable-id"){ try{p.destroy();}catch(x){} go(newCode()); } else $("hostStat").textContent="Erreur de liaison ("+e.type+")."; });
+    linkUi();
+  };
+  go(code);
+}
+async function joinStart(code){
+  code=(code||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(code.length!==4){ $("joinStat").textContent="Le code fait 4 caractères (affiché sur la tablette)."; return; }
+  $("joinStat").textContent="Connexion…";
+  try{ speechSynthesis.speak(new SpeechSynthesisUtterance("")); }catch(e){}
+  try{ await loadPeer(); }catch(e){ $("joinStat").textContent="Impossible de charger la liaison : il faut une connexion internet."; return; }
+  linkStop(); LINK.role="join"; LINK.code=code;
+  const p=new Peer(); LINK.peer=p;
+  p.on("open",()=>{
+    const conn=p.connect(PEER_PREFIX+code,{reliable:true});
+    conn.on("open",()=>{ LINK.conn=conn; try{ localStorage.setItem("flechettes.join",code); }catch(e){} $("joinModal").classList.add("hidden"); CAM.info={t:"state",idle:true}; openCam(true); });
+    conn.on("data",m=>{ if(m&&m.t==="state") camOnInfo(m); });
+    conn.on("close",()=>{ LINK.conn=null; if(CAM.on&&CAM.remote) camStatus("Liaison perdue avec la tablette. Fermez puis reconnectez.",true); });
+  });
+  p.on("error",e=>{ $("joinStat").textContent = e.type==="peer-unavailable" ? "Code introuvable : vérifiez le code et que la tablette affiche l'écran « Relier un téléphone »." : "Erreur de liaison ("+e.type+")."; });
+}
+$("mLink").addEventListener("click",()=>{ $("menuModal").classList.add("hidden"); $("hostModal").classList.remove("hidden"); hostStart(); });
+$("linkTag").addEventListener("click",()=>{ $("hostModal").classList.remove("hidden"); linkUi(); });
+$("hostClose").addEventListener("click",()=>$("hostModal").classList.add("hidden"));
+$("hostStop").addEventListener("click",()=>{ linkStop(); $("hostStat").textContent="Liaison coupée."; });
+$("hostSound").addEventListener("click",()=>{ CAM.sound=!CAM.sound; try{ localStorage.setItem("flechettes.sound",CAM.sound?"1":"0"); }catch(e){} $("hostSound").setAttribute("aria-pressed",String(CAM.sound)); if(CAM.sound) say("Voix activée"); });
+$("phoneCamBtn").addEventListener("click",()=>{ let c=""; try{ c=localStorage.getItem("flechettes.join")||""; }catch(e){} $("joinCode").value=c; $("joinStat").textContent=""; $("joinModal").classList.remove("hidden"); });
+$("joinGo").addEventListener("click",()=>joinStart($("joinCode").value));
+$("joinCode").addEventListener("keydown",e=>{ if(e.key==="Enter") joinStart($("joinCode").value); });
+$("joinClose").addEventListener("click",()=>$("joinModal").classList.add("hidden"));
 
 load();
 if(S.playing&&S.sides) showGame(); else showSetup();
