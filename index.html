@@ -856,9 +856,15 @@ function applyH(h,x,y){ const w=h[6]*x+h[7]*y+1; return [(h[0]*x+h[1]*y+h[2])/w,
 
 /* --- Différence entre deux images : pixels changés et plus grosse tache --- */
 function analyse(ref,cur,W,Hh,maskIdx,TH){
-  TH=TH||32; const N=W*Hh, bin=new Uint8Array(N); let count=0;
+  TH=TH||28; const N=W*Hh, bin=new Uint8Array(N); let count=0;
+  // compensation de l'exposition automatique de la caméra
+  const sr=[0,0,0], sc=[0,0,0], qr=[0,0,0], qc=[0,0,0]; let m=0;
+  for(let k=0;k<maskIdx.length;k+=4){ const o=maskIdx[k]*4; m++; for(let c=0;c<3;c++){ const a=ref[o+c], b=cur[o+c]; sr[c]+=a; sc[c]+=b; qr[c]+=a*a; qc[c]+=b*b; } }
+  const g=[1,1,1], off=[0,0,0];
+  for(let c=0;c<3;c++){ const mr=sr[c]/m, mc=sc[c]/m, vr=Math.sqrt(Math.max(1,qr[c]/m-mr*mr)), vc=Math.sqrt(Math.max(1,qc[c]/m-mc*mc));
+    g[c]=Math.min(1.6,Math.max(0.6,vr/vc)); off[c]=mr-g[c]*mc; }
   for(let k=0;k<maskIdx.length;k++){ const i=maskIdx[k], o=i*4;
-    const d=Math.max(Math.abs(ref[o]-cur[o]),Math.abs(ref[o+1]-cur[o+1]),Math.abs(ref[o+2]-cur[o+2]));
+    const d=Math.max(Math.abs(ref[o]-cur[o]*g[0]-off[0]),Math.abs(ref[o+1]-cur[o+1]*g[1]-off[1]),Math.abs(ref[o+2]-cur[o+2]*g[2]-off[2]));
     if(d>TH){ bin[i]=1; count++; } }
   if(count<6) return {count,comp:null};
   const dil=new Uint8Array(N);
@@ -963,7 +969,7 @@ const say_lbl=d=> d.n===0?"Raté": d.n===25?(d.m===2?"Bull":"25"): (d.m===3?"Tri
 
 const CAM={on:false,remote:false,stream:null,state:"off",H:null,Hinv:null,W:400,Hh:0,aspect:0,maskIdx:null,maskN:0,moveTh:6,
   prev:null,ref:null,clean:null,stable:0,dirty:true,last:0,fix:false,sound:true,tips:[],calPts:[],cv:null,ctx:null,
-  info:null,turnSeen:0,wasWin:false,autoTry:0,autoAt:0,glow:0};
+  info:null,turnSeen:0,wasWin:false,autoTry:0,autoAt:0,glow:0,zoom:1,zoomCaps:null,outerR:330,autoZoomed:false,debug:false,dbg:null,crop:null,vw:0,vh:0};
 try{ CAM.sound = localStorage.getItem("flechettes.sound")!=="0"; }catch(e){}
 
 function say(t,force){ if(!CAM.sound||!t) return; try{ const u=new SpeechSynthesisUtterance(t); u.lang="fr-FR"; u.rate=1.05; if(!force) speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
@@ -972,16 +978,28 @@ let lastT;
 function flash(t){ const el=$("camLast"); el.textContent=t; el.classList.add("on"); clearTimeout(lastT); lastT=setTimeout(()=>el.classList.remove("on"),1400); }
 
 function loadCal(){ try{ const c=JSON.parse(localStorage.getItem(CAL_KEY)||"null"); return c&&c.pts&&c.pts.length===4?c:null; }catch(e){ return null; } }
-function saveCal(){ try{ localStorage.setItem(CAL_KEY,JSON.stringify({pts:CAM.calPts,aspect:CAM.aspect})); }catch(e){} }
+function saveCal(){ try{ localStorage.setItem(CAL_KEY,JSON.stringify({pts:CAM.calPts,aspect:CAM.aspect,zoom:CAM.zoom})); }catch(e){} }
 function setCal(pts){ CAM.calPts=pts; CAM.H=solveH(pts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,pts); buildMask(); }
+function a2n(x,y){ const c=CAM.crop; return [(c.sx+x*c.sw/CAM.W)/CAM.vw,(c.sy+y*c.sh/CAM.Hh)/CAM.vh]; }
 function buildMask(){
-  if(!CAM.H||!CAM.Hh) return;
+  const v=$("camVideo"); if(!CAM.H||!CAM.Hinv||!v.videoWidth) return;
+  CAM.vw=v.videoWidth; CAM.vh=v.videoHeight;
+  // zone de la cible dans l'image, analysée en pleine définition
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(let a=0;a<72;a++){ const t=a/72*2*Math.PI, p=applyH(CAM.Hinv,CAM.outerR*Math.sin(t),CAM.outerR*Math.cos(t)), px=p[0]*CAM.vw, py=p[1]*CAM.vh;
+    x0=Math.min(x0,px); x1=Math.max(x1,px); y0=Math.min(y0,py); y1=Math.max(y1,py); }
+  x0=Math.max(0,Math.floor(x0)); y0=Math.max(0,Math.floor(y0)); x1=Math.min(CAM.vw,Math.ceil(x1)); y1=Math.min(CAM.vh,Math.ceil(y1));
+  if(x1-x0<20||y1-y0<20){ x0=0; y0=0; x1=CAM.vw; y1=CAM.vh; }
+  CAM.crop={sx:x0,sy:y0,sw:x1-x0,sh:y1-y0};
+  const S=560, sc=S/Math.max(CAM.crop.sw,CAM.crop.sh);
+  CAM.W=Math.max(40,Math.round(CAM.crop.sw*sc)); CAM.Hh=Math.max(40,Math.round(CAM.crop.sh*sc));
+  CAM.cv.width=CAM.W; CAM.cv.height=CAM.Hh;
   const W=CAM.W,Hh=CAM.Hh,idx=[];
-  for(let y=0;y<Hh;y++) for(let x=0;x<W;x++){ const b=applyH(CAM.H,x/W,y/Hh); if(Math.hypot(b[0],b[1])<=205) idx.push(y*W+x); }
+  for(let y=0;y<Hh;y++) for(let x=0;x<W;x++){ const n=a2n(x,y), b=applyH(CAM.H,n[0],n[1]); if(Math.hypot(b[0],b[1])<=CAM.outerR-8) idx.push(y*W+x); }
   CAM.maskIdx=Int32Array.from(idx); CAM.maskN=idx.length; CAM.moveTh=Math.max(4,Math.round(CAM.maskN/3*0.004));
   CAM.prev=CAM.ref=CAM.clean=null; CAM.dirty=true; CAM.stable=0;
 }
-function grab(v){ CAM.ctx.drawImage(v,0,0,CAM.W,CAM.Hh); return CAM.ctx.getImageData(0,0,CAM.W,CAM.Hh).data; }
+function grab(v){ const c=CAM.crop; CAM.ctx.drawImage(v,c.sx,c.sy,c.sw,c.sh,0,0,CAM.W,CAM.Hh); return CAM.ctx.getImageData(0,0,CAM.W,CAM.Hh).data; }
 function motion(a,b){ let c=0; const m=CAM.maskIdx; for(let k=0;k<m.length;k+=3){ const o=m[k]*4;
   if(Math.max(Math.abs(a[o]-b[o]),Math.abs(a[o+1]-b[o+1]),Math.abs(a[o+2]-b[o+2]))>30) c++; } return c; }
 function contentRect(){
@@ -991,10 +1009,9 @@ function contentRect(){
 function ensureSize(v){
   const asp=v.videoWidth/v.videoHeight;
   if(Math.abs(asp-CAM.aspect)>0.01){
-    CAM.aspect=asp; CAM.W=asp>=1?400:300; CAM.Hh=Math.round(CAM.W/asp);
-    CAM.cv.width=CAM.W; CAM.cv.height=CAM.Hh;
+    CAM.aspect=asp;
     const c=loadCal();
-    if(c && Math.abs(c.aspect-asp)<0.02){ setCal(c.pts); camReady("Calibrage enregistré chargé."); }
+    if(c && Math.abs(c.aspect-asp)<0.02 && Math.abs((c.zoom||1)-CAM.zoom)<0.01){ setCal(c.pts); camReady("Calibrage enregistré chargé."); }
     else startAuto();
   }
   const o=$("camOver"), r=contentRect(), dpr=window.devicePixelRatio||1;
@@ -1019,6 +1036,10 @@ function drawOverlay(){
   if(CAM.state==="cal"&&CAM.manual){ CAM.calPts.forEach((p,i)=>{ const q=P(p[0],p[1]); g.strokeStyle="#fff"; g.lineWidth=2;
     g.beginPath(); g.arc(q[0],q[1],12,0,7); g.stroke(); g.beginPath(); g.moveTo(q[0]-18,q[1]); g.lineTo(q[0]+18,q[1]); g.moveTo(q[0],q[1]-18); g.lineTo(q[0],q[1]+18); g.stroke();
     g.fillStyle="#fff"; g.font="700 13px Barlow,sans-serif"; g.textAlign="left"; g.fillText(["20","6","3","11"][i],q[0]+16,q[1]-14); }); }
+  if(CAM.debug&&CAM.dbg&&CAM.dbg.comp&&CAM.crop){ g.fillStyle="rgba(0,220,255,.8)"; const c=CAM.dbg.comp, st=Math.max(1,Math.floor(c.n/1500));
+    for(let i=0;i<c.n;i+=st){ const n=a2n(c.xs[i],c.ys[i]), q=P(n[0],n[1]); g.fillRect(q[0]-1,q[1]-1,2,2); } }
+  if(CAM.debug&&CAM.crop){ const a=P(CAM.crop.sx/CAM.vw,CAM.crop.sy/CAM.vh), b2=P((CAM.crop.sx+CAM.crop.sw)/CAM.vw,(CAM.crop.sy+CAM.crop.sh)/CAM.vh);
+    g.strokeStyle="rgba(0,220,255,.6)"; g.lineWidth=1; g.strokeRect(a[0],a[1],b2[0]-a[0],b2[1]-a[1]); }
   CAM.tips.forEach(t=>{ if(t.x<0) return; const q=P(t.x,t.y); g.fillStyle="#d42a3e"; g.strokeStyle="#fff"; g.lineWidth=2;
     g.beginPath(); g.arc(q[0],q[1],6,0,7); g.fill(); g.stroke();
     g.font="700 15px Oswald,sans-serif"; g.textAlign="left"; g.lineWidth=3; g.strokeStyle="rgba(0,0,0,.8)"; g.strokeText(t.l,q[0]+9,q[1]-8); g.fillStyle="#fff"; g.fillText(t.l,q[0]+9,q[1]-8); });
@@ -1038,15 +1059,25 @@ function camTick(){
   CAM.prev=cur;
   if(CAM.stable>=6&&CAM.dirty){ CAM.dirty=false; onStable(cur); }
 }
-function startAuto(){ CAM.state="auto"; CAM.manual=false; CAM.autoTry=0; CAM.autoAt=0; CAM.H=CAM.Hinv=null; CAM.maskIdx=null; CAM.tips=[];
+function startAuto(){ if(CAM.state!=="auto") CAM.autoTry=0; CAM.state="auto"; CAM.manual=false; CAM.autoTry=0; CAM.autoAt=0; CAM.H=CAM.Hinv=null; CAM.maskIdx=null; CAM.tips=[];
   camStatus("Recherche de la cible… cadrez-la en entier, téléphone immobile et droit."); camBar(); }
 function tryAuto(v){
   CAM.autoTry++; CAM.autoAt=performance.now()+700;
   const W=CAM.aspect>=1?640:480, H=Math.round(W/CAM.aspect), c=document.createElement("canvas"); c.width=W; c.height=H;
   const g=c.getContext("2d",{willReadFrequently:true}); g.drawImage(v,0,0,W,H);
   const r=autoCal(g.getImageData(0,0,W,H).data,W,H);
-  if(r.pts){ setCal(r.pts); saveCal(); CAM.glow=performance.now()+4000;
-    camReady("Cible repérée automatiquement. Si le dessin ne colle pas aux anneaux, touchez « Calibrer »."); buzz(40); return; }
+  if(r.pts && CAM.zoomCaps && !CAM.autoZoomed){
+    // zoom maximal qui garde toute la cible (mousse comprise) dans l'image
+    const Hi=solveH(CAL_BOARD,r.pts); let e=0;
+    for(let a=0;a<36;a++){ const t=a/36*2*Math.PI, p=applyH(Hi,(CAM.outerR+15)*Math.sin(t),(CAM.outerR+15)*Math.cos(t)); e=Math.max(e,Math.abs(p[0]-0.5),Math.abs(p[1]-0.5)); }
+    CAM.autoZoomed=true;
+    const want=Math.min(CAM.zoomCaps.max,5,CAM.zoom*0.5/Math.max(e,0.05));
+    if(want>CAM.zoom*1.12){ const z=Math.round(want*10)/10; camStatus("Cible repérée : zoom ×"+z+"…");
+      setZoom(z).then(()=>{ try{ localStorage.removeItem(CAL_KEY); }catch(x){} CAM.state="auto"; CAM.autoTry=0; CAM.autoAt=performance.now()+1200; camBar(); }); return; }
+  }
+  if(r.pts){ setCal(r.pts); saveCal(); CAM.glow=performance.now()+4000; focusOnBoard();
+    let tip=""; { const c=applyH(CAM.Hinv,0,0); if(CAM.zoomCaps&&CAM.zoom<2&&(Math.abs(c[0]-0.5)>0.18||Math.abs(c[1]-0.5)>0.18)) tip=" Astuce : centre la cible dans l'image pour zoomer davantage."; }
+    camReady("Cible repérée"+(CAM.zoom>1?" (zoom ×"+CAM.zoom+")":"")+". Si le dessin ne colle pas aux anneaux, touchez « Calibrer »."+tip); buzz(40); return; }
   if(CAM.autoTry%4===0) camStatus(r.err+" (essai "+CAM.autoTry+") — ou touchez « Manuel ».",true);
 }
 function onStable(cur){
@@ -1060,12 +1091,13 @@ function onStable(cur){
     else camStatus(I.win?"Partie terminée : "+(I.winName||"")+" gagne":"Retirez les fléchettes de la cible (ou touchez « Cible vide »)",!I.win);
     return;
   }
-  const r=analyse(CAM.ref,cur,CAM.W,CAM.Hh,CAM.maskIdx);
-  if(!r.comp||r.comp.n<10){ if(r.count<CAM.maskN*0.01) CAM.ref=cur; return; }
-  if(r.comp.n>CAM.maskN*0.08){ camStatus("Gros changement : quelqu'un devant la cible ? Touchez « Cible vide » si la lumière a changé.",true); return; }
-  const tp=tipOf(r.comp), nx=tp[0]/CAM.W, ny=tp[1]/CAM.Hh, b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
-  CAM.ref=cur; CAM.tips.push({x:nx,y:ny,l:lbl(d)});
-  flash(lbl(d)); if(!CAM.remote) say(say_lbl(d)); buzz(30);
+  const r=analyse(CAM.ref,cur,CAM.W,CAM.Hh,CAM.maskIdx); CAM.dbg=r;
+  if(!r.comp||r.comp.n<8){ if(!r.comp||r.comp.n<3) CAM.ref=cur; if(CAM.debug) camStatus("Diag : rien de net ("+(r.comp?r.comp.n:0)+" px changés)"); return; }
+  if(r.comp.n>CAM.maskN*0.12){ camStatus("Gros changement : quelqu'un devant la cible ? Touchez « Cible vide » si la lumière a changé.",true); return; }
+  const tp=tipOf(r.comp), nn=a2n(tp[0],tp[1]), nx=nn[0], ny=nn[1], b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
+  if(CAM.debug) camStatus("Diag : tache de "+r.comp.n+" px → "+lbl(d)+" (r="+Math.round(Math.hypot(b[0],b[1]))+" mm)");
+  CAM.ref=cur; CAM.tips.push({x:nx,y:ny,l:d.n===0?"Raté":lbl(d)});
+  const hors=d.n===0; flash(hors?"Raté":lbl(d)); if(!CAM.remote) say(hors?"Raté, hors cible":say_lbl(d)); buzz(30);
   camAct({t:"dart",n:d.n,m:d.n===0?1:d.m});
 }
 /* Infos de partie reçues (locales ou de la tablette) */
@@ -1146,10 +1178,11 @@ function camBar(){
   if(CAM.state==="cal"){
     b.innerHTML=`<button class="cb" data-c="manual">Recommencer</button><button class="cb pri" data-c="valid" ${CAM.calPts.length===4&&CAM.H?"":"disabled"}>Valider</button><button class="cb" data-c="auto">Auto</button><button class="cb" data-c="close">Fermer</button>`;
   } else if(CAM.state==="auto"){
-    b.innerHTML=`<button class="cb" data-c="manual">Manuel</button><button class="cb" data-c="close">Fermer</button>`;
+    b.innerHTML=`<button class="cb" data-c="manual">Manuel</button>`+(CAM.zoomCaps?`<button class="cb" data-c="zoom">Zoom ×${CAM.zoom}</button>`:"")+`<button class="cb" data-c="close">Fermer</button>`;
   } else {
     b.innerHTML=`<button class="cb" data-c="undo">↶ Annuler</button><button class="cb" data-c="miss">Raté</button><button class="cb" data-c="rest">Fin volée</button><button class="cb${CAM.fix?" on":""}" data-c="fix">Corriger</button>`+
       `<button class="cb" data-c="clean">Cible vide</button><button class="cb" data-c="auto">Calibrer</button>`+
+      (CAM.zoomCaps?`<button class="cb" data-c="zoom">Zoom ×${CAM.zoom}</button>`:"")+`<button class="cb${CAM.debug?" on":""}" data-c="diag">Diag</button>`+
       (CAM.remote?"":`<button class="cb${CAM.sound?" on":""}" data-c="sound">Voix ${CAM.sound?"oui":"non"}</button>`)+`<button class="cb" data-c="close">Fermer</button>`;
   }
 }
@@ -1157,7 +1190,11 @@ $("camBar").addEventListener("click",ev=>{
   const b=ev.target.closest("[data-c]"); if(!b||b.disabled) return; const c=b.dataset.c, v=$("camVideo");
   if(c==="close") return closeCam();
   if(c==="manual") return startManual();
-  if(c==="auto"){ try{ localStorage.removeItem(CAL_KEY); }catch(e){} return startAuto(); }
+  if(c==="diag"){ CAM.debug=!CAM.debug; camStatus(CAM.debug?"Diagnostic : la zone analysée est encadrée en bleu, les pixels qui changent s'affichent en bleu.":"Diagnostic coupé"); camBar(); return; }
+  if(c==="zoom"){ const z=CAM.zoomCaps, steps=[1,1.5,2,2.5,3].filter(x=>x>=z.min&&x<=z.max); let i=steps.findIndex(x=>x>CAM.zoom+0.01); const nz=i<0?steps[0]:steps[i];
+    CAM.autoZoomed=true; setZoom(nz).then(()=>{ try{ localStorage.removeItem(CAL_KEY); }catch(e){} startAuto(); CAM.autoZoomed=true; }); return; }
+  if(c==="auto"){ try{ localStorage.removeItem(CAL_KEY); }catch(e){} CAM.autoZoomed=false;
+    if(CAM.zoomCaps&&CAM.zoom!==1){ setZoom(1).then(()=>{ try{ localStorage.removeItem(CAL_KEY); }catch(e){} startAuto(); }); return; } return startAuto(); }
   if(c==="valid"){ setCal(CAM.calPts); saveCal(); camReady("Calibré."); return; }
   if(c==="sound"){ CAM.sound=!CAM.sound; try{ localStorage.setItem("flechettes.sound",CAM.sound?"1":"0"); }catch(e){} if(CAM.sound) say("Voix activée"); camBar(); return; }
   if(c==="fix"){ CAM.fix=!CAM.fix; camStatus(CAM.fix?"Touchez l'endroit exact où la dernière fléchette est plantée.":"Correction annulée",CAM.fix); camBar(); return; }
@@ -1184,13 +1221,32 @@ async function openCam(remote){
   const v=$("camVideo");
   try{
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error("nomedia");
-    CAM.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}}});
+    CAM.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
     v.srcObject=CAM.stream; await v.play();
+    try{ const tr=CAM.stream.getVideoTracks()[0], caps=tr.getCapabilities?tr.getCapabilities():{};
+      CAM.zoomCaps = caps.zoom && caps.zoom.max>1 ? caps.zoom : null; CAM.zoom=1;
+      let z=1; try{ z=parseFloat(localStorage.getItem("flechettes.zoom")||"1")||1; }catch(e){}
+      if(CAM.zoomCaps && z>1) await setZoom(z);
+    }catch(e){ CAM.zoomCaps=null; }
+    camBar();
   }catch(e){
     camStatus("Caméra indisponible. Elle ne marche que dans l'appli ouverte depuis ton adresse GitHub (pas dans l'aperçu Claude), après avoir autorisé l'accès à la caméra.",true);
     $("camBar").innerHTML='<button class="cb" data-c="close">Fermer</button>'; return;
   }
   keepAwake(); requestAnimationFrame(camTick);
+}
+async function focusOnBoard(){
+  if(!CAM.stream||!CAM.Hinv) return; const c=applyH(CAM.Hinv,0,0), tr=CAM.stream.getVideoTracks()[0];
+  const caps=tr.getCapabilities?tr.getCapabilities():{}, adv={};
+  if(caps.focusMode&&caps.focusMode.includes("continuous")) adv.focusMode="continuous";
+  if(caps.exposureMode&&caps.exposureMode.includes("continuous")) adv.exposureMode="continuous";
+  if("pointsOfInterest" in caps || (navigator.mediaDevices.getSupportedConstraints&&navigator.mediaDevices.getSupportedConstraints().pointsOfInterest)) adv.pointsOfInterest=[{x:Math.min(1,Math.max(0,c[0])),y:Math.min(1,Math.max(0,c[1]))}];
+  try{ if(Object.keys(adv).length) await tr.applyConstraints({advanced:[adv]}); }catch(e){}
+}
+async function setZoom(z){
+  try{ const tr=CAM.stream.getVideoTracks()[0]; await tr.applyConstraints({advanced:[{zoom:z}]}); CAM.zoom=z;
+    try{ localStorage.setItem("flechettes.zoom",String(z)); }catch(e){} }catch(e){}
+  CAM.aspect=0; camBar();
 }
 function closeCam(){
   CAM.on=false; CAM.state="off"; try{ CAM.stream&&CAM.stream.getTracks().forEach(t=>t.stop()); }catch(e){} CAM.stream=null;
