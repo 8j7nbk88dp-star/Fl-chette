@@ -185,6 +185,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 .camhud .vs span{min-width:44px;padding:3px 6px;border-radius:7px;background:rgba(26,33,30,.85);border:1px solid var(--line);font-family:var(--display);font-size:16px;text-align:center}
 .camstat{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;text-align:center;font-size:15px;font-weight:600;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8));pointer-events:none;text-wrap:balance}
 .camstat.warn{color:var(--gold)}
+.camdiag{position:absolute;left:8px;bottom:52px;display:flex;gap:6px;pointer-events:none}
+.camdiag div{background:rgba(0,0,0,.7);border:1px solid var(--line);border-radius:8px;padding:3px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.camdiag small{font-size:11px;color:var(--muted)}
+.camdiag canvas{width:min(30vw,190px);height:auto;display:block}
 .camlast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.8);font-family:var(--display);font-size:64px;font-weight:700;color:#fff;background:rgba(16,21,19,.85);border:2px solid var(--gold);padding:6px 26px;border-radius:18px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;white-space:nowrap}
 .camlast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .cambar{display:flex;flex-wrap:wrap;gap:6px;padding:8px calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px);background:var(--bg)}
@@ -309,6 +313,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
     <canvas id="camOver"></canvas>
     <div class="camhud" id="camHud"></div>
     <div class="camlast" id="camLast"></div>
+    <div class="camdiag hidden" id="camDiag"></div>
     <div class="camstat" id="camStat"></div>
   </div>
   <div class="cambar" id="camBar"></div>
@@ -855,7 +860,7 @@ function solveH(src,dst){
 function applyH(h,x,y){ const w=h[6]*x+h[7]*y+1; return [(h[0]*x+h[1]*y+h[2])/w,(h[3]*x+h[4]*y+h[5])/w]; }
 
 /* --- Différence entre deux images : pixels changés et plus grosse tache --- */
-function analyse(ref,cur,W,Hh,maskIdx,TH){
+function analyse(ref,cur,W,Hh,maskIdx,TH,noise){
   TH=TH||28; const N=W*Hh, bin=new Uint8Array(N); let count=0;
   // compensation de l'exposition automatique de la caméra
   const sr=[0,0,0], sc=[0,0,0], qr=[0,0,0], qc=[0,0,0]; let m=0;
@@ -865,7 +870,7 @@ function analyse(ref,cur,W,Hh,maskIdx,TH){
     g[c]=Math.min(1.6,Math.max(0.6,vr/vc)); off[c]=mr-g[c]*mc; }
   for(let k=0;k<maskIdx.length;k++){ const i=maskIdx[k], o=i*4;
     const d=Math.max(Math.abs(ref[o]-cur[o]*g[0]-off[0]),Math.abs(ref[o+1]-cur[o+1]*g[1]-off[1]),Math.abs(ref[o+2]-cur[o+2]*g[2]-off[2]));
-    if(d>TH){ bin[i]=1; count++; } }
+    if(d>TH&&!(noise&&noise[i]>=2)){ bin[i]=1; count++; } }
   if(count<6) return {count,comp:null};
   const dil=new Uint8Array(N);
   for(let y=1;y<Hh-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x;
@@ -898,6 +903,45 @@ function tipOf(c){
   return k?[px/k,py/k]:[mx,my];
 }
 
+/* --- Position de la caméra déduite du calibrage (pour savoir dans quel sens pointent les fléchettes) --- */
+function mul3(A,B){ return A.map((r,i)=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j])); }
+function camPose(Hinv,vw,vh,zoom){
+  const Hn=[[Hinv[0],Hinv[1],Hinv[2]],[Hinv[3],Hinv[4],Hinv[5]],[Hinv[6],Hinv[7],1]];
+  const Hm=mul3([[vw,0,-vw/2],[0,vh,-vh/2],[0,0,1]],Hn);
+  const h1=[Hm[0][0],Hm[1][0],Hm[2][0]], h2=[Hm[0][1],Hm[1][1],Hm[2][1]], h3=[Hm[0][2],Hm[1][2],Hm[2][2]];
+  const cand=[];
+  const d1=h1[2]*h2[2]; if(Math.abs(d1)>1e-12){ const f2=-(h1[0]*h2[0]+h1[1]*h2[1])/d1; if(f2>0) cand.push(Math.sqrt(f2)); }
+  const d2=h1[2]*h1[2]-h2[2]*h2[2]; if(Math.abs(d2)>1e-12){ const f2=-(h1[0]*h1[0]+h1[1]*h1[1]-h2[0]*h2[0]-h2[1]*h2[1])/d2; if(f2>0) cand.push(Math.sqrt(f2)); }
+  const lo=0.35*Math.max(vw,vh), hi=4*Math.max(vw,vh)*(zoom||1);
+  const ok=cand.filter(x=>x>lo&&x<hi); const f= ok.length? ok.reduce((a,b)=>a+b,0)/ok.length : 0.75*Math.max(vw,vh)*(zoom||1);
+  const m1=[h1[0]/f,h1[1]/f,h1[2]], m2=[h2[0]/f,h2[1]/f,h2[2]], m3=[h3[0]/f,h3[1]/f,h3[2]];
+  let l=2/(Math.hypot(...m1)+Math.hypot(...m2)); if(m3[2]*l<0) l=-l;
+  const r1=m1.map(x=>x*l), r2=m2.map(x=>x*l), t=m3.map(x=>x*l);
+  const r3=[r1[1]*r2[2]-r1[2]*r2[1], r1[2]*r2[0]-r1[0]*r2[2], r1[0]*r2[1]-r1[1]*r2[0]];
+  const zs = -(r3[0]*t[0]+r3[1]*t[1]+r3[2]*t[2])>=0 ? 1 : -1;   // côté de la cible où se trouve la caméra
+  const proj=(X,Y,Z)=>{ const c=[0,1,2].map(k=>r1[k]*X+r2[k]*Y+r3[k]*Z*zs+t[k]); return [(f*c[0]/c[2]+vw/2)/vw,(f*c[1]/c[2]+vh/2)/vh]; };
+  // point de l'image -> point de la cible à la hauteur h (mm) au-dessus du plan
+  const unproj=(nx,ny,h)=>{ const a=(nx*vw-vw/2)/f, b=(ny*vh-vh/2)/f, Z=h*zs;
+    const A11=r1[0]-a*r1[2], A12=r2[0]-a*r2[2], B1=-((r3[0]-a*r3[2])*Z+t[0]-a*t[2]);
+    const A21=r1[1]-b*r1[2], A22=r2[1]-b*r2[2], B2=-((r3[1]-b*r3[2])*Z+t[1]-b*t[2]);
+    const det=A11*A22-A12*A21; if(Math.abs(det)<1e-12) return null; return [(B1*A22-A12*B2)/det,(A11*B2-B1*A21)/det]; };
+  return {f,proj,unproj};
+}
+function tipFar(c,dirx,diry){
+  const n=c.n; let tmin=1e9,tmax=-1e9; const t=new Float32Array(n);
+  for(let i=0;i<n;i++){ t[i]=c.xs[i]*dirx+c.ys[i]*diry; if(t[i]<tmin)tmin=t[i]; if(t[i]>tmax)tmax=t[i]; }
+  const L=tmax-tmin, lim=tmax-Math.max(3,0.35*L); let px=0,py=0,k=0;   // centre de l'empennage (partie haute de la tache)
+  for(let i=0;i<n;i++) if(t[i]>=lim){ px+=c.xs[i]; py+=c.ys[i]; k++; }
+  return [px/k,py/k];
+}
+/* Pointe = extrémité de la tache la plus "collée" à la cible, dans le sens opposé à la sortie de la fléchette */
+function tipGeo(c,dirx,diry){
+  const n=c.n; let tmin=1e9,tmax=-1e9; const t=new Float32Array(n);
+  for(let i=0;i<n;i++){ t[i]=c.xs[i]*dirx+c.ys[i]*diry; if(t[i]<tmin)tmin=t[i]; if(t[i]>tmax)tmax=t[i]; }
+  const L=tmax-tmin, lim=tmin+Math.max(1.5,0.04*L); let px=0,py=0,k=0;
+  for(let i=0;i<n;i++) if(t[i]<=lim){ px+=c.xs[i]; py+=c.ys[i]; k++; }
+  return [px/k,py/k];
+}
 /* --- Calibrage automatique : repère l'anneau des doubles (rouge/vert) --- */
 function colorClass(r,g,b){
   const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn; if(mx<45||d<0.38*mx) return 0;
@@ -963,14 +1007,33 @@ function autoCal(d,W,H){
   if(nz<60||conf<0.45) return {err:"Je trouve la cible mais pas son orientation : gardez le téléphone droit (le 20 en haut)."};
   const pr=bestPsi*Math.PI/180;
   const pts4=CAL_BOARD.map(([u,v])=>{ const bx=u/170, by=-v/170, rx=bx*Math.cos(pr)-by*Math.sin(pr), ry=bx*Math.sin(pr)+by*Math.cos(pr); const p=toImg(rx,ry,1); return [p[0]/W,p[1]/H]; });
-  return {pts:pts4, conf, psi:bestPsi};
+  return {pts:refineCal(pts4,cls,W,H), conf, psi:bestPsi};
+}
+/* Affinage : on déplace les 4 points de calibrage tant que les anneaux rouges/verts collent mieux à l'image (vraie perspective) */
+function refineCal(pts,cls,W,H){
+  const S=[];
+  for(let i=0;i<20;i++){ const want=i%2===0?1:2;
+    for(const da of [-5,0,5]){ const t=(i*18+da)*Math.PI/180, sx=Math.sin(t), cy=Math.cos(t);
+      for(const r of [164,168,101,105]) S.push([r*sx,r*cy,want,1]);
+      for(const r of [173,158.5,110,95.5]) S.push([r*sx,r*cy,0,0.7]); } }
+  for(let a=0;a<12;a++){ const t=a*30*Math.PI/180; S.push([11*Math.sin(t),11*Math.cos(t),2,1]); }
+  const score=P=>{ const h=solveH(CAL_BOARD,P); if(!h) return -1e9; let sc=0;
+    for(const [u,v,want,w] of S){ const q=applyH(h,u,v), x=Math.round(q[0]*W), y=Math.round(q[1]*H); if(x<0||y<0||x>=W||y>=H){ sc-=w; continue; }
+      const c=cls[y*W+x]; if(want) sc+= c===want?w:(c?-w:-0.3*w); else sc+= c?-w:w; }
+    return sc; };
+  let P=pts.map(p=>p.slice()), best=score(P);
+  for(const step of [6,3,1.5,0.75]){ const sx=step/W, sy=step/H; let improved=true, guard=0;
+    while(improved&&guard++<30){ improved=false;
+      for(let k=0;k<4;k++) for(const [dx,dy] of [[sx,0],[-sx,0],[0,sy],[0,-sy]]){
+        const Q=P.map(p=>p.slice()); Q[k][0]+=dx; Q[k][1]+=dy; const s2=score(Q); if(s2>best){ best=s2; P=Q; improved=true; } } } }
+  return P;
 }
 const say_lbl=d=> d.n===0?"Raté": d.n===25?(d.m===2?"Bull":"25"): (d.m===3?"Triple ":d.m===2?"Double ":"")+d.n;
 
 const CAM={on:false,remote:false,stream:null,state:"off",H:null,Hinv:null,W:400,Hh:0,aspect:0,maskIdx:null,maskN:0,moveTh:6,
   prev:null,ref:null,clean:null,stable:0,dirty:true,last:0,fix:false,sound:true,tips:[],calPts:[],cv:null,ctx:null,
-  info:null,turnSeen:0,wasWin:false,autoTry:0,autoAt:0,glow:0,zoom:1,zoomCaps:null,outerR:330,autoZoomed:false,debug:false,dbg:null,crop:null,vw:0,vh:0};
-try{ CAM.sound = localStorage.getItem("flechettes.sound")!=="0"; }catch(e){}
+  info:null,turnSeen:0,wasWin:false,autoTry:0,autoAt:0,glow:0,zoom:1,zoomCaps:null,outerR:330,dartLen:135,flightH:120,bias:[0,0],lastEst:null,tipMode:"",autoZoomed:false,noise:null,learn:0,pose:null,snap:null,debug:false,dbg:null,crop:null,vw:0,vh:0};
+try{ CAM.sound = localStorage.getItem("flechettes.sound")!=="0"; const b=JSON.parse(localStorage.getItem("flechettes.bias")||"null"); if(b&&b.length===2) CAM.bias=b; }catch(e){}
 
 function say(t,force){ if(!CAM.sound||!t) return; try{ const u=new SpeechSynthesisUtterance(t); u.lang="fr-FR"; u.rate=1.05; if(!force) speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
 function camStatus(t,warn){ const el=$("camStat"); el.textContent=t; el.classList.toggle("warn",!!warn); }
@@ -980,6 +1043,7 @@ function flash(t){ const el=$("camLast"); el.textContent=t; el.classList.add("on
 function loadCal(){ try{ const c=JSON.parse(localStorage.getItem(CAL_KEY)||"null"); return c&&c.pts&&c.pts.length===4?c:null; }catch(e){ return null; } }
 function saveCal(){ try{ localStorage.setItem(CAL_KEY,JSON.stringify({pts:CAM.calPts,aspect:CAM.aspect,zoom:CAM.zoom})); }catch(e){} }
 function setCal(pts){ CAM.calPts=pts; CAM.H=solveH(pts,CAL_BOARD); CAM.Hinv=solveH(CAL_BOARD,pts); buildMask(); }
+function n2a(nx,ny){ const c=CAM.crop; return [(nx*CAM.vw-c.sx)*CAM.W/c.sw,(ny*CAM.vh-c.sy)*CAM.Hh/c.sh]; }
 function a2n(x,y){ const c=CAM.crop; return [(c.sx+x*c.sw/CAM.W)/CAM.vw,(c.sy+y*c.sh/CAM.Hh)/CAM.vh]; }
 function buildMask(){
   const v=$("camVideo"); if(!CAM.H||!CAM.Hinv||!v.videoWidth) return;
@@ -996,11 +1060,12 @@ function buildMask(){
   CAM.cv.width=CAM.W; CAM.cv.height=CAM.Hh;
   const W=CAM.W,Hh=CAM.Hh,idx=[];
   for(let y=0;y<Hh;y++) for(let x=0;x<W;x++){ const n=a2n(x,y), b=applyH(CAM.H,n[0],n[1]); if(Math.hypot(b[0],b[1])<=CAM.outerR-8) idx.push(y*W+x); }
-  CAM.maskIdx=Int32Array.from(idx); CAM.maskN=idx.length; CAM.moveTh=Math.max(4,Math.round(CAM.maskN/3*0.004));
+  CAM.noise=new Uint8Array(W*Hh); CAM.learn=24; CAM.pose=camPose(CAM.Hinv,CAM.vw,CAM.vh,CAM.zoom);
+  CAM.maskIdx=Int32Array.from(idx); CAM.maskN=idx.length; const pxmm=Math.max(CAM.W,CAM.Hh)/(2*CAM.outerR); CAM.pxmm=pxmm; CAM.moveTh=Math.max(4,Math.round(60*pxmm*pxmm));
   CAM.prev=CAM.ref=CAM.clean=null; CAM.dirty=true; CAM.stable=0;
 }
 function grab(v){ const c=CAM.crop; CAM.ctx.drawImage(v,c.sx,c.sy,c.sw,c.sh,0,0,CAM.W,CAM.Hh); return CAM.ctx.getImageData(0,0,CAM.W,CAM.Hh).data; }
-function motion(a,b){ let c=0; const m=CAM.maskIdx; for(let k=0;k<m.length;k+=3){ const o=m[k]*4;
+function motion(a,b){ let c=0; const m=CAM.maskIdx, nz=CAM.noise; for(let k=0;k<m.length;k+=3){ if(nz&&nz[m[k]]>=2) continue; const o=m[k]*4;
   if(Math.max(Math.abs(a[o]-b[o]),Math.abs(a[o+1]-b[o+1]),Math.abs(a[o+2]-b[o+2]))>30) c++; } return c; }
 function contentRect(){
   const v=$("camVideo"), st=$("camStage"), cw=st.clientWidth, ch=st.clientHeight, vw=v.videoWidth||16, vh=v.videoHeight||9;
@@ -1055,6 +1120,10 @@ function camTick(){
   drawOverlay();
   if(CAM.state!=="detect"&&CAM.state!=="wait"||!CAM.maskIdx) return;
   const cur=grab(v);
+  if(CAM.prev&&CAM.learn>0){ CAM.learn--; const m=CAM.maskIdx, a=CAM.prev, b=cur, nz=CAM.noise;
+    for(let k=0;k<m.length;k++){ const o=m[k]*4; if(Math.max(Math.abs(a[o]-b[o]),Math.abs(a[o+1]-b[o+1]),Math.abs(a[o+2]-b[o+2]))>22 && nz[m[k]]<250) nz[m[k]]++; }
+    if(CAM.learn===0){ let c=0; for(let k=0;k<m.length;k++) if(nz[m[k]]>=2) c++; CAM.noisyN=c; if(CAM.debug) camStatus("Diag : "+c+" pixels qui scintillent ignorés"); }
+    CAM.prev=cur; CAM.ref=null; return; }
   if(CAM.prev){ if(motion(CAM.prev,cur)>CAM.moveTh){ CAM.stable=0; CAM.dirty=true; } else CAM.stable++; }
   CAM.prev=cur;
   if(CAM.stable>=6&&CAM.dirty){ CAM.dirty=false; onStable(cur); }
@@ -1086,16 +1155,35 @@ function onStable(cur){
   if(!I||I.idle){ CAM.ref=cur; CAM.clean=cur; camStatus(CAM.remote?"En attente : lancez une partie sur la tablette.":"Lancez une partie.",true); return; }
   if(I.win){ CAM.state="wait"; }
   if(CAM.state==="wait"){
-    const r=analyse(CAM.clean,cur,CAM.W,CAM.Hh,CAM.maskIdx);
+    const r=analyse(CAM.clean,cur,CAM.W,CAM.Hh,CAM.maskIdx,28,CAM.noise);
     if(r.count<CAM.maskN*0.004 && !I.win) startVisit(cur);
     else camStatus(I.win?"Partie terminée : "+(I.winName||"")+" gagne":"Retirez les fléchettes de la cible (ou touchez « Cible vide »)",!I.win);
     return;
   }
-  const r=analyse(CAM.ref,cur,CAM.W,CAM.Hh,CAM.maskIdx); CAM.dbg=r;
-  if(!r.comp||r.comp.n<8){ if(!r.comp||r.comp.n<3) CAM.ref=cur; if(CAM.debug) camStatus("Diag : rien de net ("+(r.comp?r.comp.n:0)+" px changés)"); return; }
+  const r=analyse(CAM.ref,cur,CAM.W,CAM.Hh,CAM.maskIdx,28,CAM.noise); CAM.dbg=r;
+  if(!r.comp||r.comp.n<14){ if(r.comp) for(let i=0;i<r.comp.n;i++){ const j=r.comp.ys[i]*CAM.W+r.comp.xs[i]; if(CAM.noise[j]<250) CAM.noise[j]++; } CAM.ref=cur; if(CAM.debug) camStatus("Diag : rien de net ("+(r.comp?r.comp.n:0)+" px changés)"); return; }
   if(r.comp.n>CAM.maskN*0.12){ camStatus("Gros changement : quelqu'un devant la cible ? Touchez « Cible vide » si la lumière a changé.",true); return; }
-  const tp=tipOf(r.comp), nn=a2n(tp[0],tp[1]), nx=nn[0], ny=nn[1], b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
-  if(CAM.debug) camStatus("Diag : tache de "+r.comp.n+" px → "+lbl(d)+" (r="+Math.round(Math.hypot(b[0],b[1]))+" mm)");
+  // sens de sortie de la fléchette à cet endroit (déduit de la position de la caméra)
+  let mx=0,my=0; for(let i=0;i<r.comp.n;i++){ mx+=r.comp.xs[i]; my+=r.comp.ys[i]; } mx/=r.comp.n; my/=r.comp.n;
+  let tp=null;
+  if(CAM.pose){ const cn=a2n(mx,my), bb=applyH(CAM.H,cn[0],cn[1]), p0=CAM.pose.proj(bb[0],bb[1],0), p1=CAM.pose.proj(bb[0],bb[1],80);
+    const ax0=n2a(p0[0],p0[1]), ax1=n2a(p1[0],p1[1]); let dx=ax1[0]-ax0[0], dy=ax1[1]-ax0[1]; const dl=Math.hypot(dx,dy);
+    if(dl>2&&isFinite(dl)){
+      const e0=tipGeo(r.comp,dx/dl,dy/dl), e1=tipFar(r.comp,dx/dl,dy/dl), n0=a2n(e0[0],e0[1]), n1=a2n(e1[0],e1[1]);
+      const B0=CAM.pose.unproj(n0[0],n0[1],0), B1=CAM.pose.unproj(n1[0],n1[1],CAM.flightH);
+      if(B0&&B1){
+        // si le haut de la tache correspond à une fléchette entière plantée en B0, la pointe est visible ; sinon on part de l'empennage
+        const top=n2a(...CAM.pose.proj(B0[0],B0[1],CAM.flightH)), bot=n2a(...CAM.pose.proj(B0[0],B0[1],0));
+        const seg=Math.hypot(top[0]-bot[0],top[1]-bot[1]), gap=Math.hypot(top[0]-e1[0],top[1]-e1[1]);
+        const B = gap<0.3*seg ? B0 : B1; CAM.tipMode = gap<0.3*seg ? "pointe" : "empennage";
+        let Bf=B; if(B===B1) Bf=[B1[0]+CAM.bias[0],B1[1]+CAM.bias[1]];
+        CAM.lastEst={mode:CAM.tipMode,B:Bf};
+        const q=CAM.pose.proj(Bf[0],Bf[1],0); tp=n2a(q[0],q[1]);
+      } else tp=e0; } }
+  if(!tp) tp=tipOf(r.comp);
+  const nn=a2n(tp[0],tp[1]), nx=nn[0], ny=nn[1], b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
+  if(CAM.debug) diagSnap(CAM.ref,cur,r,tp);
+  if(CAM.debug) camStatus("Diag : tache "+r.comp.n+" px → "+lbl(d)+" à "+Math.round(Math.hypot(b[0],b[1]))+" mm du centre · repérée par "+CAM.tipMode);
   CAM.ref=cur; CAM.tips.push({x:nx,y:ny,l:d.n===0?"Raté":lbl(d)});
   const hors=d.n===0; flash(hors?"Raté":lbl(d)); if(!CAM.remote) say(hors?"Raté, hors cible":say_lbl(d)); buzz(30);
   camAct({t:"dart",n:d.n,m:d.n===0?1:d.m});
@@ -1139,6 +1227,8 @@ function camTap(ev){
   }
   if(CAM.fix&&CAM.H){
     const b=applyH(CAM.H,nx,ny), d=scoreAt(b[0],b[1]);
+    if(CAM.lastEst&&CAM.lastEst.mode==="empennage"){ const dx=b[0]-CAM.lastEst.B[0], dy=b[1]-CAM.lastEst.B[1];
+      if(Math.hypot(dx,dy)<60){ CAM.bias=[CAM.bias[0]+0.5*dx, CAM.bias[1]+0.5*dy]; try{ localStorage.setItem("flechettes.bias",JSON.stringify(CAM.bias)); }catch(e){} } CAM.lastEst=null; }
     if(CAM.tips.length) CAM.tips[CAM.tips.length-1]={x:nx,y:ny,l:lbl(d)};
     CAM.fix=false; flash(lbl(d)); if(!CAM.remote) say("Corrigé, "+say_lbl(d));
     camAct({t:"fix",n:d.n,m:d.n===0?1:d.m}); refreshRef(); camBar();
@@ -1190,7 +1280,7 @@ $("camBar").addEventListener("click",ev=>{
   const b=ev.target.closest("[data-c]"); if(!b||b.disabled) return; const c=b.dataset.c, v=$("camVideo");
   if(c==="close") return closeCam();
   if(c==="manual") return startManual();
-  if(c==="diag"){ CAM.debug=!CAM.debug; camStatus(CAM.debug?"Diagnostic : la zone analysée est encadrée en bleu, les pixels qui changent s'affichent en bleu.":"Diagnostic coupé"); camBar(); return; }
+  if(c==="diag"){ CAM.debug=!CAM.debug; if(!CAM.debug) $("camDiag").classList.add("hidden"); camStatus(CAM.debug?"Diagnostic : la zone analysée est encadrée en bleu, les pixels qui changent s'affichent en bleu.":"Diagnostic coupé"); camBar(); return; }
   if(c==="zoom"){ const z=CAM.zoomCaps, steps=[1,1.5,2,2.5,3].filter(x=>x>=z.min&&x<=z.max); let i=steps.findIndex(x=>x>CAM.zoom+0.01); const nz=i<0?steps[0]:steps[i];
     CAM.autoZoomed=true; setZoom(nz).then(()=>{ try{ localStorage.removeItem(CAL_KEY); }catch(e){} startAuto(); CAM.autoZoomed=true; }); return; }
   if(c==="auto"){ try{ localStorage.removeItem(CAL_KEY); }catch(e){} CAM.autoZoomed=false;
@@ -1234,6 +1324,16 @@ async function openCam(remote){
     $("camBar").innerHTML='<button class="cb" data-c="close">Fermer</button>'; return;
   }
   keepAwake(); requestAnimationFrame(camTick);
+}
+function diagSnap(ref,cur,r,tp){
+  const W=CAM.W,H=CAM.Hh, mk=(data)=>{ const c=document.createElement("canvas"); c.width=W; c.height=H; const g=c.getContext("2d"); const id=g.createImageData(W,H); id.data.set(data); g.putImageData(id,0,0); return c; };
+  const dif=new Uint8ClampedArray(W*H*4); for(let i=0;i<W*H;i++){ dif[i*4+3]=255; }
+  if(r.comp) for(let i=0;i<r.comp.n;i++){ const o=(r.comp.ys[i]*W+r.comp.xs[i])*4; dif[o]=0; dif[o+1]=220; dif[o+2]=255; }
+  const nz=CAM.noise; for(let i=0;i<W*H;i++) if(nz[i]>=2){ dif[i*4]=120; }
+  const cs=[mk(ref),mk(cur),mk(dif)];
+  cs.forEach(c=>{ const g=c.getContext("2d"); g.strokeStyle="#ff2d55"; g.lineWidth=2; g.beginPath(); g.arc(tp[0],tp[1],6,0,7); g.stroke(); });
+  const box=$("camDiag"); box.innerHTML=""; ["Avant","Après","Différence"].forEach((t,i)=>{ const w=document.createElement("div"); w.innerHTML='<small>'+t+'</small>'; w.appendChild(cs[i]); box.appendChild(w); });
+  box.classList.remove("hidden");
 }
 async function focusOnBoard(){
   if(!CAM.stream||!CAM.Hinv) return; const c=applyH(CAM.Hinv,0,0), tr=CAM.stream.getVideoTracks()[0];
